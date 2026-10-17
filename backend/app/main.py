@@ -60,7 +60,12 @@ def score_probabilities(home_rate: float, away_rate: float, max_goals: int = 10)
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "deepscore-api", "data_mode": "demo"}
+    configured = bool(__import__("os").getenv("FOOTBALL_API_KEY", "").strip())
+    return {
+        "status": "ok",
+        "service": "deepscore-api",
+        "data_mode": "provider_configured" if configured else "demo",
+    }
 
 
 @app.get("/")
