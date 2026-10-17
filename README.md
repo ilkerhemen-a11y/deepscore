@@ -25,7 +25,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-The mobile app uses sample data until a licensed football data provider is configured. Never commit API keys; configure them as server-side environment variables.
+The mobile prediction detail uses the historical model API for the Turkish Süper Lig. The API fetches public-domain historical archives server-side; never commit API keys, and keep any provider credentials in server-side environment variables.
 
 ## Initial scope
 - Dark-themed match dashboard
