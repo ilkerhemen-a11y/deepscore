@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import unittest
-from datetime import date
+from datetime import date, timedelta
+from unittest.mock import patch
 
-from app.historical_model import Match, expected_goals, parse_season, score_grid
+from app.historical_model import Match, expected_goals, historical_backtest, parse_season, score_grid
 
 
 class HistoricalModelTests(unittest.TestCase):
@@ -29,6 +30,32 @@ class HistoricalModelTests(unittest.TestCase):
             self.assertGreaterEqual(result[key], 0.0)
             self.assertLessEqual(result[key], 1.0)
         self.assertTrue(result["top_scores"])
+
+    def test_backtest_reports_walk_forward_baselines(self) -> None:
+        matches = []
+        start = date(2024, 8, 1)
+        teams = ("Alpha", "Beta", "Gamma", "Delta")
+        for index in range(60):
+            matches.append(Match(
+                date=start + timedelta(days=index),
+                home=teams[index % len(teams)],
+                away=teams[(index + 1) % len(teams)],
+                home_goals=2 if index % 3 else 0,
+                away_goals=0 if index % 3 else 1,
+                season="2024-25",
+            ))
+        matches.extend([
+            Match(start + timedelta(days=61), "Alpha", "Beta", 1, 0, "2024-25"),
+            Match(start + timedelta(days=62), "Gamma", "Delta", 1, 1, "2024-25"),
+        ])
+        with patch("app.historical_model.get_data", return_value=tuple(matches)):
+            result = historical_backtest(min_training_matches=60, max_test_matches=20)
+        self.assertEqual(result["evaluated_matches"], 2)
+        self.assertIn("always_pick_home_win_accuracy", result["baselines"])
+        self.assertIn("historical_majority_outcome_accuracy", result["baselines"])
+        self.assertIn("historical_outcome_frequency_brier_score", result["baselines"])
+        self.assertIn("historical_outcome_frequency_log_loss", result["baselines"])
+        self.assertIsNotNone(result["improvement_vs_historical_majority_accuracy_percentage_points"])
 
     def test_team_goal_rates_use_historical_match_results(self) -> None:
         history = [
