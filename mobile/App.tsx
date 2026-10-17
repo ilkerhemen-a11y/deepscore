@@ -149,7 +149,7 @@ export default function App() {
 }
 
 function Probability({ label, value }: { label: string; value: number }) {
-  return <View style={styles.probBox}><Text style={styles.probLabel}>{label}</Text><Text style={styles.probValue}>{value}%</Text><View style={styles.track}><View style={[styles.fill, { width: value + "%" }]} /></View></View>;
+  return <View style={styles.probBox}><Text style={styles.probLabel}>{label}</Text><Text style={styles.probValue}>{value}%</Text><View style={styles.track}><View style={[styles.fill, { width: `${value}%` }]} /></View></View>;
 }
 
 function Stat({ value, label }: { value: string; label: string }) {
