@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from math import exp, factorial
 from typing import Any
 
@@ -60,7 +61,7 @@ def score_probabilities(home_rate: float, away_rate: float, max_goals: int = 10)
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    configured = bool(__import__("os").getenv("FOOTBALL_API_KEY", "").strip())
+    configured = bool(os.getenv("FOOTBALL_API_KEY", "").strip())
     return {
         "status": "ok",
         "service": "deepscore-api",
