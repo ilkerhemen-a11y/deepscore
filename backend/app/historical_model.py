@@ -246,11 +246,23 @@ def historical_backtest(
     correct = 0
     brier_total = 0.0
     log_loss_total = 0.0
+    home_pick_correct = 0
+    majority_pick_correct = 0
+    prior_brier_total = 0.0
+    prior_log_loss_total = 0.0
+    outcome_keys = ("home_win", "draw", "away_win")
     for match_date in test_dates:
         prior = [m for m in matches if m.date < match_date]
         todays = [m for m in matches if m.date == match_date]
         if len(prior) < min_training_matches:
             continue
+        prior_counts = {key: 1 for key in outcome_keys}  # Laplace smoothing avoids zero probabilities.
+        for old_match in prior:
+            old_result = "home_win" if old_match.home_goals > old_match.away_goals else "away_win" if old_match.home_goals < old_match.away_goals else "draw"
+            prior_counts[old_result] += 1
+        prior_total = sum(prior_counts.values())
+        prior_probabilities = {key: prior_counts[key] / prior_total for key in outcome_keys}
+        majority_pick = max(outcome_keys, key=lambda key: prior_counts[key])
         for match in todays:
             try:
                 home_rate, away_rate = expected_goals(prior, match.home, match.away)
@@ -259,21 +271,35 @@ def historical_backtest(
             probabilities = score_grid(home_rate, away_rate)
             p = probabilities
             actual = "home_win" if match.home_goals > match.away_goals else "away_win" if match.home_goals < match.away_goals else "draw"
-            predicted = max(("home_win", "draw", "away_win"), key=lambda key: p[key])
+            predicted = max(outcome_keys, key=lambda key: p[key])
             correct += int(predicted == actual)
-            target = {"home_win": 0.0, "draw": 0.0, "away_win": 0.0}
-            target[actual] = 1.0
-            brier_total += sum((p[k] - target[k]) ** 2 for k in target)
+            home_pick_correct += int(actual == "home_win")
+            majority_pick_correct += int(majority_pick == actual)
+            target = {key: float(key == actual) for key in outcome_keys}
+            brier_total += sum((p[key] - target[key]) ** 2 for key in outcome_keys)
             log_loss_total -= log(max(1e-6, p[actual]))
+            prior_brier_total += sum((prior_probabilities[key] - target[key]) ** 2 for key in outcome_keys)
+            prior_log_loss_total -= log(max(1e-6, prior_probabilities[actual]))
             evaluated += 1
+    model_accuracy = correct / evaluated if evaluated else None
+    prior_accuracy = majority_pick_correct / evaluated if evaluated else None
     return {
         "mode": "chronological_walk_forward_backtest",
         "source": SOURCE,
         "evaluated_matches": evaluated,
         "minimum_training_matches": min_training_matches,
-        "accuracy": round(correct / evaluated, 4) if evaluated else None,
+        "accuracy": round(model_accuracy, 4) if model_accuracy is not None else None,
         "mean_multiclass_brier_score": round(brier_total / evaluated, 4) if evaluated else None,
         "mean_log_loss": round(log_loss_total / evaluated, 4) if evaluated else None,
+        "baselines": {
+            "always_pick_home_win_accuracy": round(home_pick_correct / evaluated, 4) if evaluated else None,
+            "historical_majority_outcome_accuracy": round(prior_accuracy, 4) if prior_accuracy is not None else None,
+            "historical_outcome_frequency_brier_score": round(prior_brier_total / evaluated, 4) if evaluated else None,
+            "historical_outcome_frequency_log_loss": round(prior_log_loss_total / evaluated, 4) if evaluated else None,
+        },
+        "improvement_vs_historical_majority_accuracy_percentage_points": round((model_accuracy - prior_accuracy) * 100, 2) if model_accuracy is not None and prior_accuracy is not None else None,
+        "improvement_vs_historical_frequency_brier": round((prior_brier_total - brier_total) / evaluated, 4) if evaluated else None,
+        "improvement_vs_historical_frequency_log_loss": round((prior_log_loss_total - log_loss_total) / evaluated, 4) if evaluated else None,
         "live_scores": False,
-        "warning": "This is a historical walk-forward evaluation, not a guarantee of future performance. Metrics are unavailable if the source archive does not contain enough dated results.",
+        "warning": "Baselines use only results dated before each test date. This is a historical walk-forward evaluation, not a guarantee of future performance. Metrics are unavailable if the source archive does not contain enough dated results.",
     }
