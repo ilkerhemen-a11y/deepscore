@@ -13,7 +13,7 @@ from app.historical_model import router as historical_model_router
 app = FastAPI(
     title="DeepScore API",
     version="0.1.0",
-    description="Football analytics API. Initial endpoints use clearly labeled demo inputs.",
+    description="Football analytics API with a historical Süper Lig model and clearly labeled demo endpoints.",
 )
 
 
@@ -67,7 +67,7 @@ def health() -> dict[str, str]:
     return {
         "status": "ok",
         "service": "deepscore-api",
-        "data_mode": "provider_configured" if configured else "demo",
+        "data_mode": "historical_model_and_provider_configured" if configured else "historical_model",
     }
 
 
