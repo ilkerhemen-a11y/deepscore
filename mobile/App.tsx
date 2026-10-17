@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 type Match = {
@@ -15,10 +15,26 @@ type Match = {
 };
 
 const MATCHES: Match[] = [
-  { league: "SÜPER LİG", time: "20:00", home: "Galatasaray", away: "Fenerbahçe", homeForm: "G G B G M", awayForm: "G G G B M", homeWin: 43, draw: 29, awayWin: 28, note: "Örnek ekran verisi · canlı veri bağlı değil" },
-  { league: "PREMIER LEAGUE", time: "18:30", home: "Arsenal", away: "Liverpool", homeForm: "G B G G G", awayForm: "G G M G B", homeWin: 38, draw: 27, awayWin: 35, note: "Örnek ekran verisi · canlı veri bağlı değil" },
-  { league: "LA LIGA", time: "21:00", home: "Real Madrid", away: "Barcelona", homeForm: "G G G M G", awayForm: "G B G G M", homeWin: 41, draw: 26, awayWin: 33, note: "Örnek ekran verisi · canlı veri bağlı değil" }
+  { league: "SÜPER LİG", time: "TARİHSEL MODEL", home: "Galatasaray", away: "Fenerbahçe", homeForm: "", awayForm: "", homeWin: 0, draw: 0, awayWin: 0, note: "Geçmiş maç verileriyle hesaplanır" }
 ];
+
+const API_BASE = "https://deepscore-api.onrender.com";
+
+type HistoricalPrediction = {
+  training_matches: number;
+  model: string;
+  expected_goals: { home: number; away: number };
+  probabilities: {
+    home_win: number;
+    draw: number;
+    away_win: number;
+    over_2_5: number;
+    under_2_5: number;
+    both_teams_to_score: number;
+    top_scores: { score: string; probability: number }[];
+  };
+  warning: string;
+};
 
 const COLORS = { bg: "#080D17", panel: "#111A2A", border: "#243149", text: "#F2F5FA", muted: "#91A0B8", green: "#35D39A", blue: "#71A7FF", amber: "#F4BC60" };
 
@@ -26,9 +42,41 @@ export default function App() {
   const [tab, setTab] = useState("Maçlar");
   const [selected, setSelected] = useState<Match | null>(null);
   const [saved, setSaved] = useState<string[]>([]);
+  const [historicalPrediction, setHistoricalPrediction] = useState<HistoricalPrediction | null>(null);
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [predictionError, setPredictionError] = useState<string | null>(null);
   const today = useMemo(() => new Intl.DateTimeFormat("tr-TR", { weekday: "long", day: "numeric", month: "long" }).format(new Date()), []);
 
   const toggleSave = (match: Match) => setSaved((current) => current.includes(match.home) ? current.filter((x) => x !== match.home) : [...current, match.home]);
+
+  useEffect(() => {
+    if (!selected) {
+      setHistoricalPrediction(null);
+      setPredictionError(null);
+      setPredictionLoading(false);
+      return;
+    }
+    let active = true;
+    setPredictionLoading(true);
+    setPredictionError(null);
+    setHistoricalPrediction(null);
+    fetch(`${API_BASE}/v1/historical/predictions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ home_team: selected.home, away_team: selected.away }),
+    })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "Tahmin verisi alınamadı.");
+        return payload as HistoricalPrediction;
+      })
+      .then((payload) => { if (active) setHistoricalPrediction(payload); })
+      .catch((error: unknown) => {
+        if (active) setPredictionError(error instanceof Error ? error.message : "Tahmin servisine ulaşılamadı.");
+      })
+      .finally(() => { if (active) setPredictionLoading(false); });
+    return () => { active = false; };
+  }, [selected]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -52,16 +100,21 @@ export default function App() {
             <Text style={styles.matchTitle}>{selected.home}</Text>
             <Text style={styles.vs}>VS</Text>
             <Text style={styles.matchTitle}>{selected.away}</Text>
-            <Text style={styles.sectionTitle}>1X2 OLASILIK TAHMİNİ</Text>
-            <View style={styles.probRow}>
-              <Probability label="1" value={selected.homeWin} />
-              <Probability label="X" value={selected.draw} />
-              <Probability label="2" value={selected.awayWin} />
-            </View>
-            <Text style={styles.disclaimer}>Bu değerler yalnızca arayüz demosu için örnektir; gerçek analiz veya canlı maç verisi değildir.</Text>
-            <Text style={styles.sectionTitle}>SON FORM (ÖRNEK)</Text>
-            <View style={styles.formRow}><Text style={styles.teamLabel}>{selected.home}</Text><Text style={styles.form}>{selected.homeForm}</Text></View>
-            <View style={styles.formRow}><Text style={styles.teamLabel}>{selected.away}</Text><Text style={styles.form}>{selected.awayForm}</Text></View>
+            <Text style={styles.sectionTitle}>GEÇMİŞ MAÇLARA DAYALI 1X2 TAHMİNİ</Text>
+            {predictionLoading ? <Text style={styles.body}>Geçmiş maç sonuçları analiz ediliyor…</Text> : predictionError ? <Text style={styles.disclaimer}>Tahmin alınamadı: {predictionError}</Text> : historicalPrediction ? (
+              <>
+                <View style={styles.probRow}>
+                  <Probability label="1" value={Math.round(historicalPrediction.probabilities.home_win * 100)} />
+                  <Probability label="X" value={Math.round(historicalPrediction.probabilities.draw * 100)} />
+                  <Probability label="2" value={Math.round(historicalPrediction.probabilities.away_win * 100)} />
+                </View>
+                <View style={styles.formRow}><Text style={styles.teamLabel}>Beklenen gol</Text><Text style={styles.form}>{historicalPrediction.expected_goals.home.toFixed(2)} – {historicalPrediction.expected_goals.away.toFixed(2)}</Text></View>
+                <View style={styles.formRow}><Text style={styles.teamLabel}>2,5 gol üstü</Text><Text style={styles.form}>{Math.round(historicalPrediction.probabilities.over_2_5 * 100)}%</Text></View>
+                <View style={styles.formRow}><Text style={styles.teamLabel}>Karşılıklı gol</Text><Text style={styles.form}>{Math.round(historicalPrediction.probabilities.both_teams_to_score * 100)}%</Text></View>
+                <View style={styles.formRow}><Text style={styles.teamLabel}>En olası skor</Text><Text style={styles.form}>{historicalPrediction.probabilities.top_scores[0]?.score ?? "—"}</Text></View>
+                <Text style={styles.disclaimer}>{historicalPrediction.training_matches} geçmiş maç kullanıldı. Bu istatistiksel tahmindir; kesin sonuç değildir.</Text>
+              </>
+            ) : <Text style={styles.body}>Tahmin hazırlanıyor.</Text>}
             <TouchableOpacity style={styles.primaryButton} onPress={() => toggleSave(selected)}>
               <Text style={styles.primaryButtonText}>{saved.includes(selected.home) ? "✓ Sanal tahmin listesinde" : "＋ Sanal tahmin listeme ekle"}</Text>
             </TouchableOpacity>
@@ -74,13 +127,13 @@ export default function App() {
               <Text style={styles.heroText}>Geçmiş performans, gol istatistikleri ve model karşılaştırmaları tek yerde.</Text>
               <View style={styles.heroStats}><Stat value="3" label="Tahmin modeli hedefi" /><Stat value="6" label="Başlangıç ligi hedefi" /><Stat value="₺0" label="Gerçek para" /></View>
             </View>
-            <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>ÖNE ÇIKAN MAÇLAR</Text><Text style={styles.smallMuted}>DEMO</Text></View>
+            <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>ÖNE ÇIKAN MAÇLAR</Text><Text style={styles.smallMuted}>GEÇMİŞ VERİ</Text></View>
             {MATCHES.map((match) => <TouchableOpacity key={match.home} style={styles.matchCard} onPress={() => setSelected(match)}>
               <View style={styles.matchMeta}><Text style={styles.league}>{match.league}</Text><Text style={styles.time}>{match.time}</Text></View>
               <View style={styles.teams}><View style={styles.teamCircle}><Text style={styles.teamInitial}>{match.home.slice(0, 1)}</Text></View><Text style={styles.teamName}>{match.home}</Text><Text style={styles.vsSmall}>VS</Text><Text style={styles.teamName}>{match.away}</Text><View style={styles.teamCircle}><Text style={styles.teamInitial}>{match.away.slice(0, 1)}</Text></View></View>
               <View style={styles.cardFooter}><Text style={styles.cardHint}>Maç istatistiklerini görüntüle</Text><Text style={styles.arrow}>›</Text></View>
             </TouchableOpacity>)}
-            <View style={styles.notice}><Text style={styles.noticeTitle}>ℹ  Veri durumu</Text><Text style={styles.noticeText}>Şu an ekranda örnek veriler var. Gerçek fikstür ve tarihsel sonuçlar, veri sağlayıcısı bağlandıktan sonra gösterilecek.</Text></View>
+            <View style={styles.notice}><Text style={styles.noticeTitle}>ℹ  Veri durumu</Text><Text style={styles.noticeText}>Maç olasılıkları, geçmiş Süper Lig sonuçlarından hesaplanan model üzerinden alınır. Canlı skor gösterilmez.</Text></View>
           </>
         ) : tab === "Tahmin" ? (
           <View style={styles.card}><Text style={styles.sectionTitle}>MODEL LABORATUVARI</Text><Text style={styles.body}>İlk aşamada 1X2 olasılık modeli, gol dağılımı modeli ve makine öğrenmesi modeli karşılaştırılacak.</Text><Text style={styles.body}>Her model zaman sıralı geçmiş testlerde değerlendirilecek. Yeterli veri yoksa sonuçlar gösterilmeyecek.</Text><View style={styles.pill}><Text style={styles.pillText}>GELİŞTİRME AŞAMASINDA</Text></View></View>
@@ -96,7 +149,7 @@ export default function App() {
 }
 
 function Probability({ label, value }: { label: string; value: number }) {
-  return <View style={styles.probBox}><Text style={styles.probLabel}>{label}</Text><Text style={styles.probValue}>{value}%</Text><View style={styles.track}><View style={[styles.fill, { width: value + "%" }]} /></View></View>;
+  return <View style={styles.probBox}><Text style={styles.probLabel}>{label}</Text><Text style={styles.probValue}>{value}%</Text><View style={styles.track}><View style={[styles.fill, { width: `${value}%` }]} /></View></View>;
 }
 
 function Stat({ value, label }: { value: string; label: string }) {
