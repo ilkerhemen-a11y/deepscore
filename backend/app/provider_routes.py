@@ -43,7 +43,7 @@ def competitions(
 
 @router.get("/fixtures")
 def fixtures(
-    league_id: int = Query(default=203, ge=1, description="Provider league ID; 203 is commonly used for Türkiye Süper Lig."),
+    league_id: int = Query(..., ge=1, description="League ID returned by the provider competitions endpoint."),
     season: int = Query(..., ge=2000, le=2100, description="Season start year, e.g. 2025 for 2025/26."),
     date_from: str | None = Query(default=None, alias="from", pattern=r"^\d{4}-\d{2}-\d{2}$"),
     date_to: str | None = Query(default=None, alias="to", pattern=r"^\d{4}-\d{2}-\d{2}$"),
