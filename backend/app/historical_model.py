@@ -208,6 +208,13 @@ def historical_prediction(request: HistoricalPredictionRequest) -> dict[str, Any
         raise HTTPException(status_code=422, detail="Home and away teams must be different")
     if len(matches) < 30:
         raise HTTPException(status_code=503, detail="Not enough completed historical matches to build a prediction")
+    known_teams = {normalize(team) for m in matches for team in (m.home, m.away)}
+    unknown = [team for team in (request.home_team, request.away_team) if normalize(team) not in known_teams]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail="No historical archive data found for team(s): " + ", ".join(unknown),
+        )
     try:
         home_rate, away_rate = expected_goals(matches, request.home_team, request.away_team)
     except ValueError as exc:
