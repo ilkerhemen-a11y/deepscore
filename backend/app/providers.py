@@ -43,7 +43,18 @@ def api_football_get(endpoint: str, params: dict[str, Any] | None = None) -> dic
     except (URLError, TimeoutError, json.JSONDecodeError) as exc:
         raise ProviderRequestError("Football data provider could not be reached or returned invalid JSON.") from exc
 
-    if payload.get("errors"):
-        # Do not return provider internals or credentials to clients.
-        raise ProviderRequestError("Football data provider reported an API error.")
+    errors = payload.get("errors")
+    if errors:
+        # Classify provider errors without returning raw provider text or secrets.
+        values = " ".join(str(value) for value in errors.values()) if isinstance(errors, dict) else str(errors)
+        normalized = values.lower()
+        if any(word in normalized for word in ("token", "api key", "apikey", "unauthorized", "unauthorised", "invalid key", "authentication")):
+            message = "API-Football rejected the API key. Check FOOTBALL_API_KEY in Render."
+        elif any(word in normalized for word in ("subscription", "plan", "season", "access", "endpoint")):
+            message = "API-Football denied access to this season or endpoint. Check plan coverage and try a supported season."
+        elif any(word in normalized for word in ("limit", "requests", "quota", "rate")):
+            message = "API-Football request quota or rate limit may have been reached."
+        else:
+            message = "API-Football rejected the request. Check provider access and request parameters."
+        raise ProviderRequestError(message)
     return payload
