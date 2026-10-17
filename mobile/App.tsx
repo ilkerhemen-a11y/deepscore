@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Component, ErrorInfo, ReactNode, useEffect, useMemo, useState } from "react";
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 type Match = {
@@ -38,7 +38,40 @@ type HistoricalPrediction = {
 
 const COLORS = { bg: "#080D17", panel: "#111A2A", border: "#243149", text: "#F2F5FA", muted: "#91A0B8", green: "#35D39A", blue: "#71A7FF", amber: "#F4BC60" };
 
+type BoundaryState = { error: string | null };
+
+class StartupErrorBoundary extends Component<{ children: ReactNode }, BoundaryState> {
+  state: BoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: unknown): BoundaryState {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("DeepScore render error:", error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <SafeAreaView style={{ flex: 1, backgroundColor: "#080D17", padding: 24, justifyContent: "center" }}>
+          <StatusBar barStyle="light-content" backgroundColor="#080D17" />
+          <Text style={{ color: "#35D39A", fontSize: 26, fontWeight: "900", marginBottom: 12 }}>DeepScore</Text>
+          <Text style={{ color: "#F2F5FA", fontSize: 18, fontWeight: "700", marginBottom: 8 }}>Açılış hatası yakalandı</Text>
+          <Text style={{ color: "#F4BC60", fontSize: 13, lineHeight: 20 }}>{this.state.error}</Text>
+          <Text style={{ color: "#91A0B8", fontSize: 12, lineHeight: 18, marginTop: 16 }}>Bu ekran, sorunun ayrıntısını belirlememize yardımcı olacak. Ekranın fotoğrafını çekip paylaşabilirsin.</Text>
+        </SafeAreaView>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
+  return <StartupErrorBoundary><AppContent /></StartupErrorBoundary>;
+}
+
+function AppContent() {
   const [tab, setTab] = useState("Maçlar");
   const [selected, setSelected] = useState<Match | null>(null);
   const [saved, setSaved] = useState<string[]>([]);
