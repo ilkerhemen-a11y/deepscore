@@ -1,265 +1,198 @@
-import React, { Component, ErrorInfo, ReactNode, useEffect, useMemo, useState } from "react";
-import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useState } from "react";
+import {
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-type Match = {
-  league: string;
-  time: string;
-  home: string;
-  away: string;
-  homeForm: string;
-  awayForm: string;
-  homeWin: number;
-  draw: number;
-  awayWin: number;
-  note: string;
+const C = {
+  bg: "#080D17",
+  panel: "#111A2A",
+  border: "#243149",
+  text: "#F2F5FA",
+  muted: "#91A0B8",
+  green: "#35D39A",
+  blue: "#71A7FF",
+  amber: "#F4BC60",
 };
 
-const MATCHES: Match[] = [
-  { league: "SÜPER LİG", time: "TARİHSEL MODEL", home: "Galatasaray", away: "Fenerbahçe", homeForm: "", awayForm: "", homeWin: 0, draw: 0, awayWin: 0, note: "Geçmiş maç verileriyle hesaplanır" }
-];
-
-const API_BASE = "https://deepscore-api.onrender.com";
-
-type HistoricalPrediction = {
-  training_matches: number;
-  model: string;
-  expected_goals: { home: number; away: number };
-  probabilities: {
-    home_win: number;
-    draw: number;
-    away_win: number;
-    over_2_5: number;
-    under_2_5: number;
-    both_teams_to_score: number;
-    top_scores: { score: string; probability: number }[];
-  };
-  warning: string;
-};
-
-const COLORS = { bg: "#080D17", panel: "#111A2A", border: "#243149", text: "#F2F5FA", muted: "#91A0B8", green: "#35D39A", blue: "#71A7FF", amber: "#F4BC60" };
-
-type BoundaryState = { error: string | null };
-
-class StartupErrorBoundary extends Component<{ children: ReactNode }, BoundaryState> {
-  state: BoundaryState = { error: null };
-
-  static getDerivedStateFromError(error: unknown): BoundaryState {
-    return { error: error instanceof Error ? error.message : String(error) };
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("DeepScore render error:", error, info.componentStack);
-  }
-
-  render() {
-    if (this.state.error) {
-      return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: "#080D17", padding: 24, justifyContent: "center" }}>
-          <StatusBar barStyle="light-content" backgroundColor="#080D17" />
-          <Text style={{ color: "#35D39A", fontSize: 26, fontWeight: "900", marginBottom: 12 }}>DeepScore</Text>
-          <Text style={{ color: "#F2F5FA", fontSize: 18, fontWeight: "700", marginBottom: 8 }}>Açılış hatası yakalandı</Text>
-          <Text style={{ color: "#F4BC60", fontSize: 13, lineHeight: 20 }}>{this.state.error}</Text>
-          <Text style={{ color: "#91A0B8", fontSize: 12, lineHeight: 18, marginTop: 16 }}>Bu ekran, sorunun ayrıntısını belirlememize yardımcı olacak. Ekranın fotoğrafını çekip paylaşabilirsin.</Text>
-        </SafeAreaView>
-      );
-    }
-    return this.props.children;
-  }
-}
+const TABS = ["Maçlar", "Tahmin", "Sanal Kupon", "Profil"];
 
 export default function App() {
-  return <StartupErrorBoundary><AppContent /></StartupErrorBoundary>;
-}
-
-function AppContent() {
   const [tab, setTab] = useState("Maçlar");
-  const [selected, setSelected] = useState<Match | null>(null);
-  const [saved, setSaved] = useState<string[]>([]);
-  const [historicalPrediction, setHistoricalPrediction] = useState<HistoricalPrediction | null>(null);
-  const [predictionLoading, setPredictionLoading] = useState(false);
-  const [predictionError, setPredictionError] = useState<string | null>(null);
-  // Keep startup independent of Intl/ICU locale support in Android release builds.
-  const today = useMemo(() => {
-    const now = new Date();
-    const weekdays = ["PAZAR", "PAZARTESİ", "SALI", "ÇARŞAMBA", "PERŞEMBE", "CUMA", "CUMARTESİ"];
-    const months = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN", "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"];
-    return `${weekdays[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]}`;
-  }, []);
-
-  const toggleSave = (match: Match) => setSaved((current) => current.includes(match.home) ? current.filter((x) => x !== match.home) : [...current, match.home]);
-
-  useEffect(() => {
-    if (!selected) {
-      setHistoricalPrediction(null);
-      setPredictionError(null);
-      setPredictionLoading(false);
-      return;
-    }
-    let active = true;
-    setPredictionLoading(true);
-    setPredictionError(null);
-    setHistoricalPrediction(null);
-    fetch(`${API_BASE}/v1/historical/predictions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ home_team: selected.home, away_team: selected.away }),
-    })
-      .then(async (response) => {
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.detail || "Tahmin verisi alınamadı.");
-        return payload as HistoricalPrediction;
-      })
-      .then((payload) => { if (active) setHistoricalPrediction(payload); })
-      .catch((error: unknown) => {
-        if (active) setPredictionError(error instanceof Error ? error.message : "Tahmin servisine ulaşılamadı.");
-      })
-      .finally(() => { if (active) setPredictionLoading(false); });
-    return () => { active = false; };
-  }, [selected]);
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
+      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
       <View style={styles.header}>
-        <View>
-          <Text style={styles.brand}>Deep<Text style={styles.brandAccent}>Score</Text></Text>
-          <Text style={styles.subtitle}>FUTBOL VERİSİ • DAHA DERİN ANALİZ</Text>
-        </View>
-        <View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>BETA</Text></View>
-      </View>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.date}>{today}</Text>
-        <Text style={styles.title}>{selected ? "Maç analizi" : tab === "Maçlar" ? "Maç merkezi" : tab}</Text>
-        <Text style={styles.description}>{selected ? selected.home + " – " + selected.away : "İstatistikleri incele, modelleri karşılaştır, tahminini test et."}</Text>
-
-        {selected ? (
-          <View style={styles.card}>
-            <TouchableOpacity onPress={() => setSelected(null)}><Text style={styles.back}>‹  TÜM MAÇLAR</Text></TouchableOpacity>
-            <Text style={styles.league}>{selected.league} · {selected.time}</Text>
-            <Text style={styles.matchTitle}>{selected.home}</Text>
-            <Text style={styles.vs}>VS</Text>
-            <Text style={styles.matchTitle}>{selected.away}</Text>
-            <Text style={styles.sectionTitle}>GEÇMİŞ MAÇLARA DAYALI 1X2 TAHMİNİ</Text>
-            {predictionLoading ? <Text style={styles.body}>Geçmiş maç sonuçları analiz ediliyor…</Text> : predictionError ? <Text style={styles.disclaimer}>Tahmin alınamadı: {predictionError}</Text> : historicalPrediction ? (
-              <>
-                <View style={styles.probRow}>
-                  <Probability label="1" value={Math.round(historicalPrediction.probabilities.home_win * 100)} />
-                  <Probability label="X" value={Math.round(historicalPrediction.probabilities.draw * 100)} />
-                  <Probability label="2" value={Math.round(historicalPrediction.probabilities.away_win * 100)} />
-                </View>
-                <View style={styles.formRow}><Text style={styles.teamLabel}>Beklenen gol</Text><Text style={styles.form}>{historicalPrediction.expected_goals.home.toFixed(2)} – {historicalPrediction.expected_goals.away.toFixed(2)}</Text></View>
-                <View style={styles.formRow}><Text style={styles.teamLabel}>2,5 gol üstü</Text><Text style={styles.form}>{Math.round(historicalPrediction.probabilities.over_2_5 * 100)}%</Text></View>
-                <View style={styles.formRow}><Text style={styles.teamLabel}>Karşılıklı gol</Text><Text style={styles.form}>{Math.round(historicalPrediction.probabilities.both_teams_to_score * 100)}%</Text></View>
-                <View style={styles.formRow}><Text style={styles.teamLabel}>En olası skor</Text><Text style={styles.form}>{historicalPrediction.probabilities.top_scores[0]?.score ?? "—"}</Text></View>
-                <Text style={styles.disclaimer}>{historicalPrediction.training_matches} geçmiş maç kullanıldı. Bu istatistiksel tahmindir; kesin sonuç değildir.</Text>
-              </>
-            ) : <Text style={styles.body}>Tahmin hazırlanıyor.</Text>}
-            <TouchableOpacity style={styles.primaryButton} onPress={() => toggleSave(selected)}>
-              <Text style={styles.primaryButtonText}>{saved.includes(selected.home) ? "✓ Sanal tahmin listesinde" : "＋ Sanal tahmin listeme ekle"}</Text>
-            </TouchableOpacity>
+        <View style={styles.brandRow}>
+          <View style={styles.logo}><Text style={styles.logoText}>D</Text></View>
+          <View>
+            <Text style={styles.brand}>DeepScore</Text>
+            <Text style={styles.tagline}>VERİYLE ANALİZ ET</Text>
           </View>
-        ) : tab === "Maçlar" ? (
+        </View>
+        <View style={styles.liveBadge}><View style={styles.dot} /><Text style={styles.liveText}>ANALİZ MERKEZİ</Text></View>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {tab === "Maçlar" && (
           <>
-            <View style={styles.hero}>
-              <Text style={styles.heroEyebrow}>ANALİZ MASASI</Text>
-              <Text style={styles.heroTitle}>Sonuçlara değil,{ "\n" }verilere odaklan.</Text>
-              <Text style={styles.heroText}>Geçmiş performans, gol istatistikleri ve model karşılaştırmaları tek yerde.</Text>
-              <View style={styles.heroStats}><Stat value="3" label="Tahmin modeli hedefi" /><Stat value="6" label="Başlangıç ligi hedefi" /><Stat value="₺0" label="Gerçek para" /></View>
+            <Text style={styles.eyebrow}>MAÇ MERKEZİ</Text>
+            <Text style={styles.title}>Merhaba!</Text>
+            <Text style={styles.subtitle}>Karşılaşmaları incele, istatistikleri keşfet.</Text>
+
+            <View style={styles.featureCard}>
+              <View style={styles.cardTop}>
+                <Text style={styles.league}>ÖRNEK KARŞILAŞMA · SÜPER LİG</Text>
+                <View style={styles.sampleBadge}><Text style={styles.sampleText}>ÖRNEK</Text></View>
+              </View>
+              <View style={styles.teams}>
+                <View style={styles.team}>
+                  <View style={styles.teamBadge}><Text style={styles.teamInitial}>G</Text></View>
+                  <Text style={styles.teamName}>Galatasaray</Text>
+                </View>
+                <Text style={styles.vs}>VS</Text>
+                <View style={styles.team}>
+                  <View style={[styles.teamBadge, styles.awayBadge]}><Text style={styles.teamInitial}>F</Text></View>
+                  <Text style={styles.teamName}>Fenerbahçe</Text>
+                </View>
+              </View>
+              <View style={styles.divider} />
+              <Text style={styles.disclaimer}>Bu ekran tasarım örneğidir. Gerçek maç verileri ve tahminler sonraki aşamada bağlanacaktır.</Text>
+              <TouchableOpacity style={styles.primaryButton} onPress={() => setTab("Tahmin")} activeOpacity={0.8}>
+                <Text style={styles.primaryButtonText}>Analiz ekranına git  ›</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>ÖNE ÇIKAN MAÇLAR</Text><Text style={styles.smallMuted}>GEÇMİŞ VERİ</Text></View>
-            {MATCHES.map((match) => <TouchableOpacity key={match.home} style={styles.matchCard} onPress={() => setSelected(match)}>
-              <View style={styles.matchMeta}><Text style={styles.league}>{match.league}</Text><Text style={styles.time}>{match.time}</Text></View>
-              <View style={styles.teams}><View style={styles.teamCircle}><Text style={styles.teamInitial}>{match.home.slice(0, 1)}</Text></View><Text style={styles.teamName}>{match.home}</Text><Text style={styles.vsSmall}>VS</Text><Text style={styles.teamName}>{match.away}</Text><View style={styles.teamCircle}><Text style={styles.teamInitial}>{match.away.slice(0, 1)}</Text></View></View>
-              <View style={styles.cardFooter}><Text style={styles.cardHint}>Maç istatistiklerini görüntüle</Text><Text style={styles.arrow}>›</Text></View>
-            </TouchableOpacity>)}
-            <View style={styles.notice}><Text style={styles.noticeTitle}>ℹ  Veri durumu</Text><Text style={styles.noticeText}>Maç olasılıkları, geçmiş Süper Lig sonuçlarından hesaplanan model üzerinden alınır. Canlı skor gösterilmez.</Text></View>
+
+            <Text style={styles.sectionTitle}>DeepScore nasıl çalışır?</Text>
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}><Text style={styles.infoIconText}>01</Text></View>
+              <View style={styles.infoCopy}><Text style={styles.infoTitle}>Maçı seç</Text><Text style={styles.infoText}>İncelemek istediğin karşılaşmayı belirle.</Text></View>
+            </View>
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}><Text style={styles.infoIconText}>02</Text></View>
+              <View style={styles.infoCopy}><Text style={styles.infoTitle}>Verileri incele</Text><Text style={styles.infoText}>Takım performansı ve olasılıkları görüntüle.</Text></View>
+            </View>
+            <View style={styles.infoRow}>
+              <View style={styles.infoIcon}><Text style={styles.infoIconText}>03</Text></View>
+              <View style={styles.infoCopy}><Text style={styles.infoTitle}>Kendi kararını ver</Text><Text style={styles.infoText}>Tahminleri kesin sonuç olarak değerlendirme.</Text></View>
+            </View>
           </>
-        ) : tab === "Tahmin" ? (
-          <View style={styles.card}><Text style={styles.sectionTitle}>MODEL LABORATUVARI</Text><Text style={styles.body}>İlk aşamada 1X2 olasılık modeli, gol dağılımı modeli ve makine öğrenmesi modeli karşılaştırılacak.</Text><Text style={styles.body}>Her model zaman sıralı geçmiş testlerde değerlendirilecek. Yeterli veri yoksa sonuçlar gösterilmeyecek.</Text><View style={styles.pill}><Text style={styles.pillText}>GELİŞTİRME AŞAMASINDA</Text></View></View>
-        ) : tab === "Sanal kupon" ? (
-          <View style={styles.card}><Text style={styles.sectionTitle}>SANAL TAHMİNLER</Text><Text style={styles.bigNumber}>{saved.length}</Text><Text style={styles.body}>Listene eklediğin maçlar</Text>{saved.length === 0 ? <Text style={styles.mutedBody}>Maç detayından “Sanal tahmin listeme ekle” seçeneğini kullan.</Text> : saved.map((name) => <Text key={name} style={styles.listItem}>•  {name}</Text>)}<Text style={styles.disclaimer}>Bu sürümde gerçek para, para yatırma veya para çekme özelliği yoktur.</Text></View>
-        ) : (
-          <View style={styles.card}><Text style={styles.sectionTitle}>PERFORMANSIN</Text><Text style={styles.body}>Tahmin geçmişi ve model başarı ölçümleri, gerçek veri bağlantısı ve kayıt sistemi tamamlandığında burada yer alacak.</Text><View style={styles.pill}><Text style={styles.pillText}>HENÜZ KAYIT YOK</Text></View></View>
         )}
+
+        {tab === "Tahmin" && (
+          <>
+            <Text style={styles.eyebrow}>VERİ ANALİZİ</Text>
+            <Text style={styles.title}>Tahmin merkezi</Text>
+            <Text style={styles.subtitle}>Analiz altyapısını adım adım kuruyoruz.</Text>
+            <View style={styles.panel}>
+              <Text style={styles.panelTitle}>Tahmin motoru hazırlanıyor</Text>
+              <Text style={styles.body}>Bu ilk kararlı sürümde açılış ve gezinme altyapısını doğruluyoruz. Maç verisi, takım istatistikleri ve olasılık hesaplamaları sonraki güncellemelerde eklenecek.</Text>
+              <View style={styles.notice}><Text style={styles.noticeText}>Bilgi: Henüz gerçek zamanlı tahmin sunulmamaktadır.</Text></View>
+            </View>
+          </>
+        )}
+
+        {tab === "Sanal Kupon" && (
+          <>
+            <Text style={styles.eyebrow}>KİŞİSEL ALAN</Text>
+            <Text style={styles.title}>Sanal kupon</Text>
+            <Text style={styles.subtitle}>Seçimlerini burada düzenleyebileceğin alan.</Text>
+            <View style={styles.panel}><Text style={styles.panelTitle}>Henüz seçim yok</Text><Text style={styles.body}>Maç seçimi ve sanal kupon özelliklerini temel uygulamanın açılışı doğrulandıktan sonra ekleyeceğiz.</Text></View>
+          </>
+        )}
+
+        {tab === "Profil" && (
+          <>
+            <Text style={styles.eyebrow}>HESABIM</Text>
+            <Text style={styles.title}>Profil</Text>
+            <Text style={styles.subtitle}>DeepScore uygulama bilgileri.</Text>
+            <View style={styles.panel}>
+              <View style={styles.profileRow}><Text style={styles.profileLabel}>Uygulama</Text><Text style={styles.profileValue}>DeepScore</Text></View>
+              <View style={styles.divider} />
+              <View style={styles.profileRow}><Text style={styles.profileLabel}>Sürüm</Text><Text style={styles.profileValue}>2.0.0</Text></View>
+              <View style={styles.divider} />
+              <View style={styles.profileRow}><Text style={styles.profileLabel}>Durum</Text><Text style={[styles.profileValue, { color: C.green }]}>Temel sürüm</Text></View>
+            </View>
+          </>
+        )}
+        <Text style={styles.footer}>DeepScore · İstatistik odaklı analiz</Text>
       </ScrollView>
-      <View style={styles.tabBar}>{["Maçlar", "Tahmin", "Sanal kupon", "Profil"].map((item) => <TouchableOpacity key={item} onPress={() => { setTab(item); setSelected(null); }} style={styles.tabItem}><Text style={[styles.tabText, tab === item && styles.tabActive]}>{item}</Text><View style={[styles.tabIndicator, tab === item && styles.tabIndicatorActive]} /></TouchableOpacity>)}</View>
+
+      <View style={styles.tabBar}>
+        {TABS.map((item, index) => {
+          const active = tab === item;
+          const symbols = ["◈", "⌁", "▤", "◉"];
+          return (
+            <TouchableOpacity key={item} style={styles.tabItem} onPress={() => setTab(item)} activeOpacity={0.75}>
+              <Text style={[styles.tabSymbol, active && styles.activeTabText]}>{symbols[index]}</Text>
+              <Text style={[styles.tabLabel, active && styles.activeTabText]}>{item}</Text>
+              {active ? <View style={styles.activeMark} /> : <View style={styles.inactiveMark} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </SafeAreaView>
   );
 }
 
-function Probability({ label, value }: { label: string; value: number }) {
-  return <View style={styles.probBox}><Text style={styles.probLabel}>{label}</Text><Text style={styles.probValue}>{value}%</Text><View style={styles.track}><View style={[styles.fill, { width: `${value}%` }]} /></View></View>;
-}
-
-function Stat({ value, label }: { value: string; label: string }) {
-  return <View style={styles.stat}><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>;
-}
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.bg },
-  header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 1, borderBottomColor: "#182338" },
-  brand: { color: COLORS.text, fontSize: 27, fontWeight: "900", letterSpacing: -1 },
-  brandAccent: { color: COLORS.green },
-  subtitle: { color: COLORS.muted, fontSize: 9, letterSpacing: 1.4, marginTop: 2 },
-  statusPill: { borderColor: "#2B795F", borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 6 },
-  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.green },
-  statusText: { color: COLORS.green, fontSize: 10, fontWeight: "800" },
-  content: { padding: 18, paddingBottom: 28 },
-  date: { color: COLORS.green, fontSize: 10, fontWeight: "800", letterSpacing: 1.5, marginTop: 4 },
-  title: { color: COLORS.text, fontSize: 28, fontWeight: "800", marginTop: 7, letterSpacing: -0.7 },
-  description: { color: COLORS.muted, fontSize: 13, lineHeight: 19, marginTop: 7, marginBottom: 20 },
-  hero: { backgroundColor: "#122238", borderRadius: 20, padding: 20, borderWidth: 1, borderColor: "#28425E", marginBottom: 25 },
-  heroEyebrow: { color: COLORS.green, fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
-  heroTitle: { color: COLORS.text, fontSize: 27, fontWeight: "900", lineHeight: 32, marginTop: 10 },
-  heroText: { color: "#B4C3D9", fontSize: 13, lineHeight: 19, marginTop: 10 },
-  heroStats: { flexDirection: "row", marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: "#2A3D57" },
-  stat: { flex: 1 },
-  statValue: { color: COLORS.green, fontSize: 18, fontWeight: "900" },
-  statLabel: { color: COLORS.muted, fontSize: 9, lineHeight: 13, marginTop: 4, paddingRight: 6 },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  sectionTitle: { color: COLORS.text, fontSize: 11, fontWeight: "900", letterSpacing: 1.1, marginTop: 6, marginBottom: 13 },
-  smallMuted: { color: COLORS.muted, fontSize: 9, fontWeight: "800" },
-  matchCard: { backgroundColor: COLORS.panel, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, padding: 15, marginBottom: 12 },
-  matchMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  league: { color: COLORS.green, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  time: { color: COLORS.amber, fontSize: 12, fontWeight: "800" },
-  teams: { flexDirection: "row", alignItems: "center", marginTop: 16, marginBottom: 16, gap: 8 },
-  teamCircle: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#202E43", alignItems: "center", justifyContent: "center" },
-  teamInitial: { color: COLORS.blue, fontWeight: "900", fontSize: 12 },
-  teamName: { color: COLORS.text, fontSize: 12, fontWeight: "700", flexShrink: 1 },
-  vsSmall: { color: COLORS.muted, fontSize: 9, fontWeight: "800" },
-  cardFooter: { borderTopWidth: 1, borderTopColor: "#263349", paddingTop: 11, flexDirection: "row", justifyContent: "space-between" },
-  cardHint: { color: COLORS.muted, fontSize: 11 },
-  arrow: { color: COLORS.green, fontSize: 20, lineHeight: 18 },
-  notice: { backgroundColor: "#1B2432", borderRadius: 13, padding: 14, marginTop: 7, borderWidth: 1, borderColor: "#3B4658" },
-  noticeTitle: { color: COLORS.amber, fontSize: 12, fontWeight: "800", marginBottom: 5 },
-  noticeText: { color: "#B7C2D3", fontSize: 11, lineHeight: 17 },
-  card: { backgroundColor: COLORS.panel, borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, padding: 18, marginBottom: 16 },
-  back: { color: COLORS.green, fontSize: 11, fontWeight: "900", marginBottom: 20 },
-  matchTitle: { color: COLORS.text, fontSize: 23, fontWeight: "900", textAlign: "center", marginTop: 10 },
-  vs: { color: COLORS.muted, fontSize: 10, textAlign: "center", fontWeight: "900", marginTop: 5 },
-  probRow: { flexDirection: "row", gap: 9, marginTop: 5 },
-  probBox: { flex: 1, backgroundColor: "#0B1220", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: COLORS.border },
-  probLabel: { color: COLORS.muted, fontSize: 10, fontWeight: "800" },
-  probValue: { color: COLORS.green, fontSize: 20, fontWeight: "900", marginTop: 5 },
-  track: { height: 4, backgroundColor: "#27354A", borderRadius: 3, marginTop: 9, overflow: "hidden" },
-  fill: { height: 4, backgroundColor: COLORS.green, borderRadius: 3 },
-  disclaimer: { color: COLORS.amber, fontSize: 10, lineHeight: 15, marginTop: 13 },
-  formRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  teamLabel: { color: COLORS.text, fontSize: 12, fontWeight: "700" },
-  form: { color: COLORS.green, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
-  primaryButton: { backgroundColor: COLORS.green, borderRadius: 12, padding: 14, alignItems: "center", marginTop: 20 },
-  primaryButtonText: { color: "#062017", fontSize: 12, fontWeight: "900" },
-  body: { color: "#B7C2D3", fontSize: 13, lineHeight: 20, marginBottom: 12 },
-  mutedBody: { color: COLORS.muted, fontSize: 12, lineHeight: 18, marginTop: 10 },
-  bigNumber: { color: COLORS.green, fontSize: 42, fontWeight: "900", marginTop: 10 },
-  listItem: { color: COLORS.text, fontSize: 13, paddingVertical: 7 },
-  pill: { alignSelf: "flex-start", borderRadius: 20, backgroundColor: "#26364B", paddingHorizontal: 11, paddingVertical: 7, marginTop: 10 },
-  pillText: { color: COLORS.blue, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  tabBar: { flexDirection: "row", backgroundColor: "#0D1421", borderTopWidth: 1, borderTopColor: "#202B3E", paddingTop: 11, paddingBottom: 8 },
-  tabItem: { flex: 1, alignItems: "center", gap: 8 },
-  tabText: { color: COLORS.muted, fontSize: 10, fontWeight: "700" },
-  tabActive: { color: COLORS.green },
-  tabIndicator: { height: 3, width: 24, borderRadius: 2, backgroundColor: "transparent" },
-  tabIndicatorActive: { backgroundColor: COLORS.green }
+  safe: { flex: 1, backgroundColor: C.bg },
+  header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: C.border, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  brandRow: { flexDirection: "row", alignItems: "center" },
+  logo: { width: 42, height: 42, borderRadius: 14, backgroundColor: C.green, alignItems: "center", justifyContent: "center", marginRight: 11 },
+  logoText: { color: C.bg, fontSize: 27, fontWeight: "900" },
+  brand: { color: C.text, fontSize: 21, fontWeight: "900", letterSpacing: 0.2 },
+  tagline: { color: C.muted, fontSize: 9, fontWeight: "800", letterSpacing: 1.8, marginTop: 3 },
+  liveBadge: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: C.border, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 7 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.green, marginRight: 6 },
+  liveText: { color: C.muted, fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
+  content: { padding: 20, paddingBottom: 28 },
+  eyebrow: { color: C.green, fontSize: 10, fontWeight: "900", letterSpacing: 1.7, marginTop: 5, marginBottom: 9 },
+  title: { color: C.text, fontSize: 29, fontWeight: "900", letterSpacing: -0.6 },
+  subtitle: { color: C.muted, fontSize: 13, lineHeight: 20, marginTop: 6, marginBottom: 22 },
+  featureCard: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.border, borderRadius: 22, padding: 17, marginBottom: 25 },
+  cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  league: { color: C.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  sampleBadge: { backgroundColor: "#263449", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 4 },
+  sampleText: { color: C.amber, fontSize: 8, fontWeight: "900" },
+  teams: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 24, paddingBottom: 22 },
+  team: { width: "40%", alignItems: "center" },
+  teamBadge: { width: 54, height: 54, borderRadius: 18, backgroundColor: "#B91C36", alignItems: "center", justifyContent: "center", marginBottom: 9 },
+  awayBadge: { backgroundColor: "#183B7A" },
+  teamInitial: { color: "#FFFFFF", fontSize: 25, fontWeight: "900" },
+  teamName: { color: C.text, fontSize: 12, fontWeight: "800", textAlign: "center" },
+  vs: { color: C.muted, fontSize: 13, fontWeight: "900" },
+  divider: { height: 1, backgroundColor: C.border, marginVertical: 14 },
+  disclaimer: { color: C.muted, fontSize: 11, lineHeight: 17 },
+  primaryButton: { backgroundColor: C.green, borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 16 },
+  primaryButtonText: { color: C.bg, fontSize: 13, fontWeight: "900" },
+  sectionTitle: { color: C.text, fontSize: 17, fontWeight: "900", marginBottom: 13 },
+  infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 17 },
+  infoIcon: { width: 39, height: 39, borderRadius: 13, backgroundColor: "#17283A", alignItems: "center", justifyContent: "center", marginRight: 12 },
+  infoIconText: { color: C.blue, fontSize: 12, fontWeight: "900" },
+  infoCopy: { flex: 1 },
+  infoTitle: { color: C.text, fontSize: 13, fontWeight: "800", marginBottom: 3 },
+  infoText: { color: C.muted, fontSize: 11, lineHeight: 16 },
+  panel: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.border, borderRadius: 18, padding: 18 },
+  panelTitle: { color: C.text, fontSize: 16, fontWeight: "900", marginBottom: 10 },
+  body: { color: C.muted, fontSize: 13, lineHeight: 21 },
+  notice: { backgroundColor: "#2C271B", borderRadius: 10, padding: 12, marginTop: 16 },
+  noticeText: { color: C.amber, fontSize: 11, lineHeight: 17 },
+  profileRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8 },
+  profileLabel: { color: C.muted, fontSize: 13 },
+  profileValue: { color: C.text, fontSize: 13, fontWeight: "800" },
+  footer: { color: "#59667B", fontSize: 10, textAlign: "center", marginTop: 28, marginBottom: 5 },
+  tabBar: { flexDirection: "row", backgroundColor: "#0D1422", borderTopWidth: 1, borderTopColor: C.border, paddingTop: 8, paddingBottom: 5, paddingHorizontal: 4 },
+  tabItem: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 3 },
+  tabSymbol: { color: C.muted, fontSize: 19, marginBottom: 3 },
+  tabLabel: { color: C.muted, fontSize: 9, fontWeight: "700" },
+  activeTabText: { color: C.green },
+  activeMark: { width: 18, height: 3, borderRadius: 2, backgroundColor: C.green, marginTop: 5 },
+  inactiveMark: { width: 18, height: 3, marginTop: 5, backgroundColor: "transparent" },
 });
