@@ -25,9 +25,20 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-The mobile app uses sample data until a licensed football data provider is configured. Never commit API keys; configure them as server-side environment variables.
+Never commit API keys; configure private provider keys as server-side environment variables.
+
+## Free Turkish Super Lig data
+
+The backend exposes a no-account, free v1 schedule/results source through TheSportsDB:
+
+- `GET /v1/free/provider/status` — provider capabilities and limits note
+- `GET /v1/free/turkey-super-lig/fixtures?view=upcoming` — upcoming league events
+- `GET /v1/free/turkey-super-lig/fixtures?view=recent` — recent league events
+
+The free source is cached for five minutes to reduce requests. It is **not a guaranteed live-score feed**, and the free tier has lower request limits than premium. Kickoff times and results should be verified with official sources. API-Football endpoints remain available as an optional integration, but the free Turkish league endpoints do not require its API key.
 
 ## Initial scope
+
 - Dark-themed match dashboard
 - Historical head-to-head and recent-form views
 - Transparent baseline probabilities (clearly labeled as estimates)
