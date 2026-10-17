@@ -45,7 +45,13 @@ export default function App() {
   const [historicalPrediction, setHistoricalPrediction] = useState<HistoricalPrediction | null>(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
-  const today = useMemo(() => new Intl.DateTimeFormat("tr-TR", { weekday: "long", day: "numeric", month: "long" }).format(new Date()), []);
+  // Keep startup independent of Intl/ICU locale support in Android release builds.
+  const today = useMemo(() => {
+    const now = new Date();
+    const weekdays = ["PAZAR", "PAZARTESİ", "SALI", "ÇARŞAMBA", "PERŞEMBE", "CUMA", "CUMARTESİ"];
+    const months = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN", "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"];
+    return `${weekdays[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]}`;
+  }, []);
 
   const toggleSave = (match: Match) => setSaved((current) => current.includes(match.home) ? current.filter((x) => x !== match.home) : [...current, match.home]);
 
@@ -89,7 +95,7 @@ export default function App() {
         <View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>BETA</Text></View>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.date}>{today.toLocaleUpperCase("tr-TR")}</Text>
+        <Text style={styles.date}>{today}</Text>
         <Text style={styles.title}>{selected ? "Maç analizi" : tab === "Maçlar" ? "Maç merkezi" : tab}</Text>
         <Text style={styles.description}>{selected ? selected.home + " – " + selected.away : "İstatistikleri incele, modelleri karşılaştır, tahminini test et."}</Text>
 
