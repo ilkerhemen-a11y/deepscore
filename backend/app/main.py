@@ -6,11 +6,16 @@ from typing import Any
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from app.provider_routes import router as provider_router
+
 app = FastAPI(
     title="DeepScore API",
     version="0.1.0",
     description="Football analytics API. Initial endpoints use clearly labeled demo inputs.",
 )
+
+
+app.include_router(provider_router)
 
 
 class PredictionRequest(BaseModel):
