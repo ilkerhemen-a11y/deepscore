@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from app.provider_routes import router as provider_router
+from app.historical_model import router as historical_model_router
 
 app = FastAPI(
     title="DeepScore API",
@@ -17,6 +18,7 @@ app = FastAPI(
 
 
 app.include_router(provider_router)
+app.include_router(historical_model_router)
 
 
 class PredictionRequest(BaseModel):
