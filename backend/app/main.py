@@ -7,16 +7,18 @@ from typing import Any
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from app.free_provider_routes import router as free_provider_router
 from app.provider_routes import router as provider_router
 
 app = FastAPI(
     title="DeepScore API",
     version="0.1.0",
-    description="Football analytics API. Initial endpoints use clearly labeled demo inputs.",
+    description="Football analytics API with optional API-Football and free Turkish Super Lig schedule/results.",
 )
 
 
 app.include_router(provider_router)
+app.include_router(free_provider_router)
 
 
 class PredictionRequest(BaseModel):
@@ -61,11 +63,11 @@ def score_probabilities(home_rate: float, away_rate: float, max_goals: int = 10)
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    configured = bool(os.getenv("FOOTBALL_API_KEY", "").strip())
+    api_football_configured = bool(os.getenv("FOOTBALL_API_KEY", "").strip())
     return {
         "status": "ok",
         "service": "deepscore-api",
-        "data_mode": "provider_configured" if configured else "demo",
+        "data_mode": "api_football_and_free" if api_football_configured else "free_provider_available",
     }
 
 
