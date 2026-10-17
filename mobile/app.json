@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "DeepScore",
+    "slug": "deepscore",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.deepscore.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1220"
+      }
+    },
+    "splash": {
+      "backgroundColor": "#0B1220"
+    }
+  }
+}
