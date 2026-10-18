@@ -67,6 +67,19 @@ public final class MainActivity extends Activity {
     private String seasonSource = "";
     private String selectedSeasonRound = "Tümü";
     private final List<SeasonFixture> seasonFixtures = new ArrayList<>();
+    private boolean standingsLoading = false;
+    private boolean standingsLoaded = false;
+    private String standingsMessage = "";
+    private final List<StandingRow> standings = new ArrayList<>();
+    private EditText oddsStakeInput, oddsSingleInput, oddsCombinedInput;
+    private TextView oddsResult;
+
+    private static final class StandingRow {
+        final String team;
+        int played, won, drawn, lost, goalsFor, goalsAgainst, points;
+        StandingRow(String team) { this.team = team; }
+        int goalDifference() { return goalsFor - goalsAgainst; }
+    }
 
     private static final class SeasonFixture {
         final String round, date, time, home, away, homeScore, awayScore, status;
@@ -159,11 +172,237 @@ public final class MainActivity extends Activity {
         switch (activeTab) {
             case "Arşiv": renderMatches(true); break;
             case "Fikstür": renderSeasonFixtures(); break;
+            case "Puan Durumu": renderStandings(); break;
+            case "Oran": renderOddsCalculator(); break;
             case "Tahminler": renderPredictions(); break;
             case "Sanal Kupon": renderVirtualBets(); break;
             case "Profil": renderProfile(); break;
             default: renderMatches(false); break;
         }
+    }
+
+    private void renderStandings() {
+        if (!standingsLoaded && !standingsLoading) loadStandings();
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(18), dp(16), dp(18), dp(28));
+        scroll.addView(content);
+        addHeader(content);
+        addText(content, "Süper Lig Puan Durumu", 25, WHITE, true, 24);
+        addText(content, "2025–2026 sezonu · Maç sonuçlarından hesaplanır", 12, MUTED, false, 6);
+        if (standingsLoading) addText(content, "Puan durumu hazırlanıyor…", 13, MUTED, false, 16);
+        if (!standingsMessage.isEmpty()) {
+            LinearLayout panel = infoPanel("VERİ BİLGİSİ", standingsMessage);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(14);
+            content.addView(panel, lp);
+        }
+        if (standingsLoaded && !standings.isEmpty()) {
+            int scoredMatches = 0;
+            for (StandingRow row : standings) scoredMatches += row.played;
+            scoredMatches /= 2;
+            addText(content, "Hesaplamaya katılan maç: " + scoredMatches + " / 306", 12,
+                    scoredMatches == 306 ? GREEN : Color.rgb(255, 190, 100), true, 14);
+            addText(content, scoredMatches == 306 ? "Tam sezon verisi" :
+                    "Eksik skorlar nedeniyle bu tablo geçicidir; resmî puan durumu olarak değerlendirme.", 11, MUTED, false, 4);
+            LinearLayout table = new LinearLayout(this);
+            table.setOrientation(LinearLayout.VERTICAL);
+            table.setPadding(dp(10), dp(10), dp(10), dp(10));
+            table.setBackground(round(PANEL, 14, LINE));
+            LinearLayout header = new LinearLayout(this);
+            header.setGravity(Gravity.CENTER_VERTICAL);
+            header.addView(text("#  Takım", 10, MUTED, true), new LinearLayout.LayoutParams(0, -2, 1));
+            String[] cols = {"O", "G", "B", "M", "AV", "P"};
+            for (String col : cols) {
+                TextView t = text(col, 10, GREEN, true); t.setGravity(Gravity.CENTER);
+                header.addView(t, new LinearLayout.LayoutParams(dp(25), -2));
+            }
+            table.addView(header);
+            for (int i = 0; i < standings.size(); i++) {
+                StandingRow row = standings.get(i);
+                LinearLayout line = new LinearLayout(this);
+                line.setGravity(Gravity.CENTER_VERTICAL);
+                line.setPadding(0, dp(11), 0, dp(11));
+                TextView team = text((i + 1) + ". " + row.team, 11, WHITE, i < 4);
+                team.setMaxLines(2);
+                line.addView(team, new LinearLayout.LayoutParams(0, -2, 1));
+                int[] vals = {row.played, row.won, row.drawn, row.lost, row.goalDifference(), row.points};
+                for (int j = 0; j < vals.length; j++) {
+                    TextView t = text(String.valueOf(vals[j]), 10, j == 5 ? GREEN : MUTED, j == 5);
+                    t.setGravity(Gravity.CENTER);
+                    line.addView(t, new LinearLayout.LayoutParams(dp(25), -2));
+                }
+                table.addView(line);
+                if (i < standings.size() - 1) addDivider(table, 0, 0);
+            }
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.topMargin = dp(12);
+            content.addView(table, lp);
+        }
+        pageContent.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+    }
+
+    private void loadStandings() {
+        if (standingsLoading) return;
+        standingsLoading = true;
+        new Thread(() -> {
+            List<SeasonFixture> fixtures = new ArrayList<>();
+            String error = "";
+            try {
+                JSONObject json = apiGet("/v1/free/turkey-super-lig/season?season=2025-26");
+                JSONArray arr = json.optJSONArray("fixtures");
+                if (arr != null) for (int i = 0; i < arr.length(); i++) {
+                    JSONObject f = arr.optJSONObject(i);
+                    if (f == null) continue;
+                    String hs = f.isNull("home_score") ? "" : f.optString("home_score", "");
+                    String as = f.isNull("away_score") ? "" : f.optString("away_score", "");
+                    fixtures.add(new SeasonFixture(f.optString("round", ""), f.optString("date", ""),
+                            f.optString("time", ""), f.optString("home_team", ""), f.optString("away_team", ""),
+                            hs, as, f.optString("status", "")));
+                }
+            } catch (Exception ex) { error = "Puan durumu verileri alınamadı. İnternet bağlantısını kontrol edip yeniden dene."; }
+            final String finalError = error;
+            final List<SeasonFixture> finalFixtures = fixtures;
+            runOnUiThread(() -> {
+                standingsLoading = false;
+                standingsLoaded = true;
+                standingsMessage = finalError;
+                standings.clear();
+                java.util.Map<String, StandingRow> map = new java.util.HashMap<>();
+                for (SeasonFixture f : finalFixtures) {
+                    if (f.home.isEmpty() || f.away.isEmpty()) continue;
+                    StandingRow home = map.computeIfAbsent(f.home, StandingRow::new);
+                    StandingRow away = map.computeIfAbsent(f.away, StandingRow::new);
+                    if (!f.hasScore()) continue;
+                    int h, a;
+                    try { h = Integer.parseInt(f.homeScore); a = Integer.parseInt(f.awayScore); }
+                    catch (NumberFormatException ex) { continue; }
+                    home.played++; away.played++;
+                    home.goalsFor += h; home.goalsAgainst += a;
+                    away.goalsFor += a; away.goalsAgainst += h;
+                    if (h > a) { home.won++; home.points += 3; away.lost++; }
+                    else if (h < a) { away.won++; away.points += 3; home.lost++; }
+                    else { home.drawn++; away.drawn++; home.points++; away.points++; }
+                }
+                standings.addAll(map.values());
+                java.util.Collections.sort(standings, (a, b) -> {
+                    int cmp = Integer.compare(b.points, a.points);
+                    if (cmp == 0) cmp = Integer.compare(b.goalDifference(), a.goalDifference());
+                    if (cmp == 0) cmp = Integer.compare(b.goalsFor, a.goalsFor);
+                    return cmp != 0 ? cmp : a.team.compareToIgnoreCase(b.team);
+                });
+                if (finalError.isEmpty() && finalFixtures.size() > 0) {
+                    int completed = 0;
+                    for (SeasonFixture f : finalFixtures) if (f.hasScore()) completed++;
+                    standingsMessage = completed < finalFixtures.size()
+                            ? "Kaynakta " + completed + " maçın skoru mevcut. Eksik maçlar tabloya katılmadı."
+                            : "Tablo mevcut sezon sonuçlarından hesaplandı.";
+                }
+                if ("Puan Durumu".equals(activeTab)) renderPage();
+            });
+        }).start();
+    }
+
+    private void renderOddsCalculator() {
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(18), dp(16), dp(18), dp(28));
+        scroll.addView(content);
+        addHeader(content);
+        addText(content, "Oran Hesaplama", 25, WHITE, true, 24);
+        addText(content, "Bahis tutarı, tek oran ve birleşik oran hesapları", 12, MUTED, false, 5);
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(16), dp(16), dp(16), dp(16));
+        panel.setBackground(round(PANEL, 16, LINE));
+        addText(panel, "BAHİŞ TUTARI (TL)", 10, GREEN, true, 0);
+        oddsStakeInput = numericInput("Örn. 100");
+        panel.addView(oddsStakeInput, inputLayout());
+        addText(panel, "TEK ORAN", 10, GREEN, true, 16);
+        oddsSingleInput = decimalInput("Örn. 1,80");
+        panel.addView(oddsSingleInput, inputLayout());
+        addText(panel, "BİRLEŞİK ORANLAR (virgülle ayır)", 10, GREEN, true, 16);
+        oddsCombinedInput = decimalInput("Örn. 1,50, 1,80, 2,00");
+        panel.addView(oddsCombinedInput, inputLayout());
+        TextView calculate = text("HESAPLA", 13, BG, true);
+        calculate.setGravity(Gravity.CENTER);
+        calculate.setPadding(dp(14), dp(15), dp(14), dp(15));
+        calculate.setBackground(round(GREEN, 12, GREEN));
+        LinearLayout.LayoutParams calcLp = new LinearLayout.LayoutParams(-1, -2);
+        calcLp.topMargin = dp(18);
+        panel.addView(calculate, calcLp);
+        oddsResult = text("Tutar ve oranları girip Hesapla'ya dokun.", 13, WHITE, false);
+        oddsResult.setPadding(0, dp(16), 0, 0);
+        panel.addView(oddsResult);
+        calculate.setOnClickListener(v -> calculateOdds());
+        LinearLayout.LayoutParams panelLp = new LinearLayout.LayoutParams(-1, -2);
+        panelLp.topMargin = dp(16);
+        content.addView(panel, panelLp);
+        LinearLayout note = infoPanel("BİLGİ", "Hesaplama tahminidir. Toplam dönüş, yatırılan tutarı içerir; net kazanç bu tutar çıkarıldıktan sonra hesaplanır.");
+        LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, -2);
+        noteLp.topMargin = dp(12);
+        content.addView(note, noteLp);
+        pageContent.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+    }
+
+    private EditText numericInput(String hint) {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint(hint);
+        input.setHintTextColor(MUTED);
+        input.setTextColor(WHITE);
+        input.setTextSize(14);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        input.setPadding(dp(12), dp(10), dp(12), dp(10));
+        input.setBackground(round(PANEL_LIGHT, 10, LINE));
+        return input;
+    }
+
+    private EditText decimalInput(String hint) {
+        EditText input = numericInput(hint);
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        return input;
+    }
+
+    private LinearLayout.LayoutParams inputLayout() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(50));
+        lp.topMargin = dp(6);
+        return lp;
+    }
+
+    private void calculateOdds() {
+        try {
+            double stake = Double.parseDouble(oddsStakeInput.getText().toString().trim().replace(",", "."));
+            double single = Double.parseDouble(oddsSingleInput.getText().toString().trim().replace(",", "."));
+            if (stake <= 0 || single <= 1) throw new IllegalArgumentException();
+            double combined = 1.0;
+            String raw = oddsCombinedInput.getText().toString().trim();
+            if (!raw.isEmpty()) {
+                String[] pieces = raw.split("[,;\\s]+");
+                for (String piece : pieces) {
+                    double odd = Double.parseDouble(piece.replace(",", "."));
+                    if (odd <= 1) throw new IllegalArgumentException();
+                    combined *= odd;
+                }
+            } else combined = single;
+            double total = stake * single;
+            double net = total - stake;
+            StringBuilder result = new StringBuilder();
+            result.append("Tek oran toplam dönüş: ").append(money(total)).append(" TL\n");
+            result.append("Tek oran net kazanç: ").append(money(net)).append(" TL\n");
+            result.append("Birleşik oran: ").append(String.format(java.util.Locale.US, "%.2f", combined)).append("\n");
+            result.append("Birleşik oran toplam dönüş: ").append(money(stake * combined)).append(" TL\n");
+            result.append("Birleşik oran net kazanç: ").append(money(stake * combined - stake)).append(" TL");
+            oddsResult.setText(result.toString());
+        } catch (Exception ex) {
+            oddsResult.setText("Lütfen geçerli bir bahis tutarı ve 1'den büyük oranlar gir. Birleşik oranları virgülle ayır.");
+        }
+    }
+
+    private String money(double value) {
+        return String.format(java.util.Locale.forLanguageTag("tr-TR"), "%.2f", value);
     }
 
     private void renderSeasonFixtures() {
@@ -1252,8 +1491,8 @@ public final class MainActivity extends Activity {
         nav.setGravity(Gravity.CENTER_VERTICAL);
         nav.setPadding(dp(6), dp(7), dp(6), dp(7));
         nav.setBackground(round(PANEL, 0, LINE));
-        String[] labels = {"Maçlar", "Fikstür", "Arşiv", "Tahminler", "Sanal Kupon", "Profil"};
-        String[] icons = {"⌂", "▦", "▤", "◇", "🎟", "◉"};
+        String[] labels = {"Maçlar", "Fikstür", "Puan Durumu", "Oran", "Arşiv", "Tahminler", "Sanal Kupon", "Profil"};
+        String[] icons = {"⌂", "▦", "▤", "∑", "▤", "◇", "🎟", "◉"};
         for (int i = 0; i < labels.length; i++) {
             final String tab = labels[i];
             boolean selected = tab.equals(activeTab) && selectedMatch == null;
