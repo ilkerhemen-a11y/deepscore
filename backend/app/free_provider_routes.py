@@ -98,6 +98,96 @@ def turkey_super_lig_fixtures(
     return _fetch_events(view)
 
 
+
+# TFF is the authoritative source for the completed 2025-26 season.
+TFF_SEASON_URL = "https://www.tff.org/Default.aspx?hafta={round}&pageID=1768"
+
+
+def _fetch_tff_round(round_number: int) -> list[dict[str, Any]]:
+    """Parse one official TFF round page into normalized fixtures."""
+    from html.parser import HTMLParser
+    import re
+    from html import unescape
+
+    class _Rows(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__(convert_charrefs=True)
+            self.rows: list[list[str]] = []
+            self.row: list[str] | None = None
+            self.cell: list[str] | None = None
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            if tag == "tr":
+                self.row = []
+            elif tag in ("td", "th") and self.row is not None:
+                self.cell = []
+
+        def handle_data(self, data: str) -> None:
+            if self.cell is not None:
+                self.cell.append(data)
+
+        def handle_endtag(self, tag: str) -> None:
+            if tag in ("td", "th") and self.row is not None and self.cell is not None:
+                self.row.append(" ".join(" ".join(self.cell).split()))
+                self.cell = None
+            elif tag == "tr" and self.row is not None:
+                self.rows.append(self.row)
+                self.row = None
+                self.cell = None
+
+    request = Request(
+        TFF_SEASON_URL.format(round=round_number),
+        headers={"Accept": "text/html", "User-Agent": "DeepScore/1.0 (fixture archive)"},
+    )
+    try:
+        with urlopen(request, timeout=12) as response:
+            page = response.read().decode("utf-8", errors="replace")
+    except (HTTPError, URLError, TimeoutError):
+        return []
+
+    parser = _Rows()
+    parser.feed(page)
+    fixtures: list[dict[str, Any]] = []
+    score_pattern = re.compile(r"^\s*(\d+)\s*[-–]\s*(\d+)\s*$")
+    date_pattern = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}:\d{2}))?")
+    for row in parser.rows:
+        cells = [unescape(cell).strip() for cell in row if cell and cell.strip()]
+        score_index = next((i for i, cell in enumerate(cells) if score_pattern.match(cell)), None)
+        if score_index is None or score_index < 2 or score_index + 1 >= len(cells):
+            continue
+        date_match = date_pattern.search(cells[0])
+        score_match = score_pattern.match(cells[score_index])
+        if not date_match or not score_match:
+            continue
+        home_team = cells[score_index - 1]
+        away_team = cells[score_index + 1]
+        if not home_team or not away_team or len(home_team) > 100 or len(away_team) > 100:
+            continue
+        day, month, year, kickoff = date_match.groups()
+        fixtures.append({
+            "round": f"{round_number}. Round",
+            "date": f"{year}-{month}-{day}",
+            "time": kickoff,
+            "home_team": home_team,
+            "away_team": away_team,
+            "home_score": int(score_match.group(1)),
+            "away_score": int(score_match.group(2)),
+            "status": "finished",
+        })
+    return fixtures
+
+
+def _fetch_tff_2025_26() -> list[dict[str, Any]]:
+    """Fetch official TFF round pages concurrently; return only a complete season."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        batches = list(pool.map(_fetch_tff_round, range(1, 35)))
+    fixtures = [fixture for batch in batches for fixture in batch]
+    # Fail closed: don't silently replace the official feed with a partial scrape.
+    return fixtures if len(fixtures) == 306 else []
+
+
 # OpenFootball publishes the full Turkish Süper Lig season archive as public-domain JSON.
 SEASON_ARCHIVE_BASE = "https://raw.githubusercontent.com/openfootball/football.json/master"
 _SEASON_CACHE_SECONDS = 21600
@@ -114,6 +204,23 @@ def turkey_super_lig_season(
         cached = _season_cache.get(season)
         if cached and now - cached[0] < _SEASON_CACHE_SECONDS:
             return cached[1]
+
+    if season == "2025-26":
+        official_fixtures = _fetch_tff_2025_26()
+        if official_fixtures:
+            official_fixtures.sort(key=lambda item: (item.get("date") or "9999-99-99", item.get("time") or "99:99", item["round"]))
+            result = {
+                "source": "Türkiye Futbol Federasyonu (TFF) official season fixture pages",
+                "competition": "Turkish Süper Lig",
+                "season": season,
+                "count": len(official_fixtures),
+                "finished_count": len(official_fixtures),
+                "fixtures": official_fixtures,
+                "notice": "Results and fixtures parsed from official TFF round pages.",
+            }
+            with _cache_lock:
+                _season_cache[season] = (time.monotonic(), result)
+            return result
 
     url = f"{SEASON_ARCHIVE_BASE}/{season}/tr.1.json"
     request = Request(url, headers={"Accept": "application/json", "User-Agent": "DeepScore/1.0"})
