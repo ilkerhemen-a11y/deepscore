@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 import unicodedata
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -79,8 +80,13 @@ def parse_season(text: str, season: str) -> list[Match]:
     return matches
 
 
-@lru_cache(maxsize=1)
 def load_matches() -> tuple[Match, ...]:
+    """Refresh archive data every six hours; failed refreshes are retried."""
+    return _load_matches(int(time.time() // 21600))
+
+
+@lru_cache(maxsize=1)
+def _load_matches(cache_window: int) -> tuple[Match, ...]:
     """Fetch historical season archives concurrently and cache the combined results."""
     def fetch_season(season: str, url: str) -> tuple[str, list[Match]]:
         request = Request(url, headers={"User-Agent": "DeepScore/1.0 historical-model"})
@@ -95,14 +101,35 @@ def load_matches() -> tuple[Match, ...]:
     with ThreadPoolExecutor(max_workers=min(6, len(DATA_URLS))) as pool:
         futures = [pool.submit(fetch_season, season, url) for season, url in DATA_URLS.items()]
         for future in as_completed(futures):
-            _season, season_matches = future.result()
-            all_matches.extend(season_matches)
+            try:
+                _season, season_matches = future.result()
+            except RuntimeError:
+                continue
+            all_matches.extend(m for m in season_matches if m.date < date.today())
+    if not all_matches:
+        raise RuntimeError("No completed historical data could be loaded. Please retry later.")
     # Keep only valid completed matches; date and stable season ordering make walk-forward tests deterministic.
     unique: dict[tuple[str, str, str, int, int], Match] = {}
     for match in all_matches:
         key = (match.date.isoformat(), normalize(match.home), normalize(match.away), match.home_goals, match.away_goals)
         unique[key] = match
     return tuple(sorted(unique.values(), key=lambda m: (m.date, m.season, normalize(m.home), normalize(m.away))))
+
+
+def data_quality(matches: list[Match] | tuple[Match, ...]) -> dict[str, Any]:
+    seasons = sorted({m.season for m in matches})
+    latest = max((m.date for m in matches), default=None)
+    missing = sorted(set(DATA_URLS) - set(seasons))
+    age = (date.today() - latest).days if latest else None
+    return {
+        "loaded_seasons": seasons,
+        "unavailable_seasons": missing,
+        "latest_match_date": latest.isoformat() if latest else None,
+        "days_since_latest_match": age,
+        "stale": age is None or age > 45,
+        "partial": bool(missing),
+        "notice": "Archive coverage may be incomplete. Missing seasons and old results reduce the relevance of predictions.",
+    }
 
 
 def normalize(value: str) -> str:
@@ -204,6 +231,7 @@ def model_status() -> dict[str, Any]:
         "source_license": "Public domain (OpenFootball repository declaration)",
         "seasons": list(DATA_URLS),
         "completed_matches_loaded": len(matches),
+        "data_quality": data_quality(matches),
         "teams_in_archives": len(teams),
         "model": "season_weighted_smoothed_poisson",
         "live_scores": False,
@@ -291,7 +319,8 @@ def historical_prediction(request: HistoricalPredictionRequest) -> dict[str, Any
         "source": SOURCE,
         "match": {"home": request.home_team, "away": request.away_team},
         "training_matches": len(matches),
-        "training_seasons": list(DATA_URLS),
+        "training_seasons": sorted({m.season for m in matches}),
+        "data_quality": data_quality(matches),
         "model": "season_weighted_smoothed_poisson",
         "expected_goals": {"home": round(home_rate, 2), "away": round(away_rate, 2)},
         "probabilities": score_grid(home_rate, away_rate),

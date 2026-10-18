@@ -6,6 +6,7 @@ type Prediction = {
   match: { home: string; away: string };
   source: string;
   training_matches: number;
+  data_quality?: { latest_match_date: string | null; partial: boolean; stale: boolean; unavailable_seasons: string[] };
   expected_goals: { home: number; away: number };
   probabilities: { home_win: number; draw: number; away_win: number; over_2_5: number; under_2_5: number; both_teams_to_score: number; top_scores: { score: string; probability: number }[] };
 };
@@ -71,6 +72,11 @@ export default function PredictionLab() {
     {prediction && <View>
       <Text style={s.title}>{prediction.match.home} – {prediction.match.away}</Text>
       <Text style={s.body}>{prediction.training_matches} geçmiş maç kullanıldı.</Text>
+      {prediction.data_quality && <View>
+        <Text style={s.body}>Verideki son maç: {prediction.data_quality.latest_match_date ?? "Bilinmiyor"}</Text>
+        {prediction.data_quality.partial && <Text style={s.warning}>Yüklenemeyen veya sonuç içermeyen sezonlar: {prediction.data_quality.unavailable_seasons.join(", ")}</Text>}
+        {prediction.data_quality.stale && <Text style={s.warning}>Arşivde son 45 güne ait sonuç yok. Tahmin güncel takım gücünü yansıtmayabilir.</Text>}
+      </View>}
       {([
         ["Ev sahibi kazanır", prediction.probabilities.home_win], ["Beraberlik", prediction.probabilities.draw], ["Deplasman kazanır", prediction.probabilities.away_win],
         ["2,5 gol üstü", prediction.probabilities.over_2_5], ["2,5 gol altı", prediction.probabilities.under_2_5], ["Karşılıklı gol", prediction.probabilities.both_teams_to_score],

@@ -2,12 +2,51 @@ from __future__ import annotations
 
 import unittest
 from datetime import date, timedelta
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
-from app.historical_model import Match, expected_goals, historical_backtest, historical_matches, historical_teams, parse_season, score_grid
+from app.historical_model import Match, _load_matches, load_matches, data_quality, expected_goals, historical_backtest, historical_matches, historical_teams, parse_season, score_grid
 
 
 class HistoricalModelTests(unittest.TestCase):
+    def test_loader_survives_one_failed_season_and_reports_missing_data(self) -> None:
+        text = "  Fri Aug 9 2024\n    20:30  Alpha v Beta 2-1\n"
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = text.encode()
+        def fetch(request, timeout):
+            if "missing" in request.full_url:
+                raise OSError("offline")
+            return response
+        _load_matches.cache_clear()
+        try:
+            with patch("app.historical_model.DATA_URLS", {"2024-25": "https://test/ok", "2025-26": "https://test/missing"}), patch("app.historical_model.urlopen", side_effect=fetch):
+                matches = load_matches()
+                quality = data_quality(matches)
+                self.assertEqual(len(matches), 1)
+                self.assertTrue(quality["partial"])
+                self.assertEqual(quality["unavailable_seasons"], ["2025-26"])
+                self.assertEqual(quality["latest_match_date"], "2024-08-09")
+        finally:
+            _load_matches.cache_clear()
+
+    def test_total_source_failure_is_not_cached(self) -> None:
+        _load_matches.cache_clear()
+        try:
+            with patch("app.historical_model.DATA_URLS", {"2024-25": "https://test/offline"}), patch("app.historical_model.urlopen", side_effect=OSError("offline")) as fetch:
+                for _ in range(2):
+                    with self.assertRaises(RuntimeError):
+                        load_matches()
+                self.assertEqual(fetch.call_count, 2)
+        finally:
+            _load_matches.cache_clear()
+
+    def test_archive_cache_refreshes_after_six_hours(self) -> None:
+        with patch("app.historical_model._load_matches", return_value=()) as loader:
+            with patch("app.historical_model.time.time", return_value=21600):
+                load_matches()
+            with patch("app.historical_model.time.time", return_value=43200):
+                load_matches()
+            self.assertEqual([call.args[0] for call in loader.call_args_list], [1, 2])
+
     def test_backtest_caps_matches_and_excludes_future_results(self) -> None:
         start = date(2024, 1, 1)
         matches = [Match(start + timedelta(days=i // 3), "Alpha", "Beta", 1, 0, "2024-25") for i in range(90)]
