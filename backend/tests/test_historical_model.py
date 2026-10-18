@@ -8,6 +8,15 @@ from app.historical_model import Match, expected_goals, historical_backtest, his
 
 
 class HistoricalModelTests(unittest.TestCase):
+    def test_backtest_caps_matches_and_excludes_future_results(self) -> None:
+        start = date(2024, 1, 1)
+        matches = [Match(start + timedelta(days=i // 3), "Alpha", "Beta", 1, 0, "2024-25") for i in range(90)]
+        matches.append(Match(date.today() + timedelta(days=1), "Alpha", "Beta", 0, 9, "2024-25"))
+        with patch("app.historical_model.get_data", return_value=tuple(matches)):
+            result = historical_backtest(min_training_matches=60, max_test_matches=20)
+        self.assertEqual(result["evaluated_matches"], 20)
+        self.assertEqual(result["accuracy"], 1.0)
+
     def test_parser_reads_completed_matches_and_skips_unplayed_fixtures(self) -> None:
         text = """= Turkish Süper Lig 2024/25
 

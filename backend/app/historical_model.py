@@ -306,9 +306,10 @@ def historical_backtest(
     max_test_matches: int = Query(default=250, ge=20, le=500),
 ) -> dict[str, Any]:
     """Chronological walk-forward test; each test match is predicted only from earlier dates."""
-    matches = list(get_data())
+    matches = sorted((m for m in get_data() if m.date < date.today()), key=lambda m: (m.date, m.home, m.away))
     # Same-day matches are kept out of one another's training data to avoid date leakage.
-    test_dates = sorted({m.date for m in matches})[-max_test_matches:]
+    test_matches = matches[-max_test_matches:]
+    test_dates = sorted({m.date for m in test_matches})
     evaluated = 0
     correct = 0
     brier_total = 0.0
@@ -320,7 +321,7 @@ def historical_backtest(
     outcome_keys = ("home_win", "draw", "away_win")
     for match_date in test_dates:
         prior = [m for m in matches if m.date < match_date]
-        todays = [m for m in matches if m.date == match_date]
+        todays = [m for m in test_matches if m.date == match_date]
         if len(prior) < min_training_matches:
             continue
         prior_counts = {key: 1 for key in outcome_keys}  # Laplace smoothing avoids zero probabilities.

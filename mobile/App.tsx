@@ -1,3 +1,5 @@
+import PredictionLab from "./PredictionLab";
+import { apiRequest } from "./api";
 import React, { useEffect, useMemo, useState } from "react";
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -25,7 +27,7 @@ type Fixture = {
   status: "finished" | "scheduled" | "result_unavailable";
 };
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "https://deepscore-api.onrender.com";
+
 
 const MATCHES: Match[] = [
   { league: "SÜPER LİG", time: "20:00", home: "Galatasaray", away: "Fenerbahçe", homeForm: "G G B G M", awayForm: "G G G B M", homeWin: 43, draw: 29, awayWin: 28, note: "Örnek ekran verisi · canlı veri bağlı değil" },
@@ -52,11 +54,7 @@ export default function App() {
     let active = true;
     setFixtureLoading(true);
     setFixtureError("");
-    fetch(`${API_BASE_URL}/v1/free/turkey-super-lig/season?season=2025-26`)
-      .then((response) => {
-        if (!response.ok) throw new Error(`Fikstür verisi alınamadı (HTTP ${response.status}).`);
-        return response.json();
-      })
+    apiRequest<{ fixtures: Fixture[] }>("/v1/free/turkey-super-lig/season?season=2025-26")
       .then((data) => {
         if (!active) return;
         const items: Fixture[] = Array.isArray(data.fixtures) ? data.fixtures : [];
@@ -174,7 +172,7 @@ export default function App() {
             ) : null}
           </View>
         ) : tab === "Tahmin" ? (
-          <View style={styles.card}><Text style={styles.sectionTitle}>MODEL LABORATUVARI</Text><Text style={styles.body}>İlk aşamada 1X2 olasılık modeli, gol dağılımı modeli ve makine öğrenmesi modeli karşılaştırılacak.</Text><Text style={styles.body}>Her model zaman sıralı geçmiş testlerde değerlendirilecek. Yeterli veri yoksa sonuçlar gösterilmeyecek.</Text><View style={styles.pill}><Text style={styles.pillText}>GELİŞTİRME AŞAMASINDA</Text></View></View>
+          <PredictionLab />
         ) : tab === "Sanal kupon" ? (
           <View style={styles.card}><Text style={styles.sectionTitle}>SANAL TAHMİNLER</Text><Text style={styles.bigNumber}>{saved.length}</Text><Text style={styles.body}>Listene eklediğin maçlar</Text>{saved.length === 0 ? <Text style={styles.mutedBody}>Maç detayından “Sanal tahmin listeme ekle” seçeneğini kullan.</Text> : saved.map((name) => <Text key={name} style={styles.listItem}>•  {name}</Text>)}<Text style={styles.disclaimer}>Bu sürümde gerçek para, para yatırma veya para çekme özelliği yoktur.</Text></View>
         ) : (
