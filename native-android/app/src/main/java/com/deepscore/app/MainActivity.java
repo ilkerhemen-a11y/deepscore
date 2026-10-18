@@ -72,10 +72,10 @@ public final class MainActivity extends Activity {
                 "21 Nisan 2024", "Santiago Bernabéu", "2023–2024 sezonu lig karşılaşması."));
         matches.add(new Match("SÜPER LİG", "Fenerbahçe", "Galatasaray", "1", "3",
                 "21 Eylül 2024", "Ülker Stadyumu", "2024–2025 sezonu lig karşılaşması."));
-        matches.add(new Match("LA LIGA", "Barcelona", "Real Madrid", "4", "0",
-                "26 Ekim 2024", "Estadi Olímpic Lluís Companys", "2024–2025 sezonu lig karşılaşması."));
-        matches.add(new Match("SÜPER LİG", "Galatasaray", "Fenerbahçe", "3", "0",
-                "19 Mayıs 2025", "RAMS Park", "2024–2025 sezonu lig karşılaşması."));
+        matches.add(new Match("LA LIGA", "Real Madrid", "Barcelona", "0", "4",
+                "26 Ekim 2024", "Santiago Bernabéu", "2024–2025 sezonu lig karşılaşması."));
+        matches.add(new Match("SÜPER LİG", "Galatasaray", "Fenerbahçe", "0", "0",
+                "24 Şubat 2025", "RAMS Park", "2024–2025 sezonu lig karşılaşması."));
         matches.add(new Match("LA LIGA", "Barcelona", "Real Madrid", "1", "2",
                 "28 Ekim 2023", "Estadi Olímpic Lluís Companys", "2023–2024 sezonu lig karşılaşması."));
     }
