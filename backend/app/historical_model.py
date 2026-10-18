@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
@@ -80,16 +81,22 @@ def parse_season(text: str, season: str) -> list[Match]:
 
 @lru_cache(maxsize=1)
 def load_matches() -> tuple[Match, ...]:
-    """Fetch the three most recent completed-season archives and cache for this process."""
-    all_matches: list[Match] = []
-    for season, url in DATA_URLS.items():
+    """Fetch historical season archives concurrently and cache the combined results."""
+    def fetch_season(season: str, url: str) -> tuple[str, list[Match]]:
         request = Request(url, headers={"User-Agent": "DeepScore/1.0 historical-model"})
         try:
             with urlopen(request, timeout=8) as response:
                 text = response.read().decode("utf-8")
         except (OSError, URLError, TimeoutError) as exc:
             raise RuntimeError(f"Historical source unavailable for season {season}") from exc
-        all_matches.extend(parse_season(text, season))
+        return season, parse_season(text, season)
+
+    all_matches: list[Match] = []
+    with ThreadPoolExecutor(max_workers=min(6, len(DATA_URLS))) as pool:
+        futures = [pool.submit(fetch_season, season, url) for season, url in DATA_URLS.items()]
+        for future in as_completed(futures):
+            _season, season_matches = future.result()
+            all_matches.extend(season_matches)
     # Keep only valid completed matches; date and stable season ordering make walk-forward tests deterministic.
     unique: dict[tuple[str, str, str, int, int], Match] = {}
     for match in all_matches:
