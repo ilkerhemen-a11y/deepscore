@@ -64,8 +64,8 @@ class HistoricalModelTests(unittest.TestCase):
             Match(date(2024, 9, 1), "Beta", "Gamma", 0, 3, "2024-25"),
         )
         with patch("app.historical_model.get_data", return_value=matches):
-            result = historical_matches(limit=2, offset=0)
-            filtered = historical_matches(team="alpha", limit=10, offset=0)
+            result = historical_matches(team=None, season=None, limit=2, offset=0)
+            filtered = historical_matches(team="alpha", season=None, limit=10, offset=0)
         self.assertEqual(result["total"], 3)
         self.assertEqual(result["count"], 2)
         self.assertTrue(result["has_more"])
