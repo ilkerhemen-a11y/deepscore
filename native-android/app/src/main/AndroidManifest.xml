@@ -4,6 +4,7 @@
     <application
         android:allowBackup="false"
         android:label="DeepScore"
+        android:icon="@drawable/ic_deepscore_launcher"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
