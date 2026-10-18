@@ -2,12 +2,12 @@
   "expo": {
     "name": "DeepScore",
     "slug": "deepscore",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "android": {
       "package": "com.deepscore.app",
-      "versionCode": 5
+      "versionCode": 6
     },
     "splash": {
       "backgroundColor": "#080D17"
