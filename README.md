@@ -47,3 +47,14 @@ Endpoints:
 - `GET /v1/historical/backtest` — chronological walk-forward evaluation using only matches dated before each test match date.
 
 The model is a season-weighted, smoothed Poisson baseline using home/away scoring and conceding rates. It is an initial statistical baseline, not a claim of proven predictive advantage. Backtest metrics must be reviewed before calling it reliable. Live scores are not provided. The archive fetch requires outbound network access from the backend runtime.
+
+## Free Turkish Super Lig data
+
+The backend exposes schedule and historical fixture data without requiring a paid football API:
+
+- `GET /v1/free/provider/status` — provider status
+- `GET /v1/free/turkey-super-lig/fixtures?view=upcoming` — upcoming league events
+- `GET /v1/free/turkey-super-lig/fixtures?view=recent` — recent league events
+- `GET /v1/free/turkey-super-lig/season?season=2025-26` — 2025/26 season fixture list grouped by round (also supports 2023-24 and 2024-25)
+
+The season endpoint uses OpenFootball's public-domain JSON archive and caches results for six hours. The upstream archive includes all 306 fixtures across 34 rounds for 2025/26, but currently provides final scores for only a subset. Missing historical scores are labeled rather than invented; verify dates, kickoff times and results against the official TFF records.
