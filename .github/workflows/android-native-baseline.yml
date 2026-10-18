@@ -24,13 +24,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Build DeepScore V6 history and AI prediction APK
+      - name: Build DeepScore V7 detailed prediction and virtual betting APK
         working-directory: native-android
         run: gradle --no-daemon assembleRelease
       - name: Upload APK
         uses: actions/upload-artifact@v6
         with:
-          name: deepscore-v6-history-ai-prediction-apk
+          name: deepscore-v7-prediction-virtual-bets-apk
           path: native-android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
