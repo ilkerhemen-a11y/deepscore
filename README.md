@@ -34,6 +34,7 @@ The backend exposes a no-account, free v1 schedule/results source through TheSpo
 - `GET /v1/free/provider/status` — provider capabilities and limits note
 - `GET /v1/free/turkey-super-lig/fixtures?view=upcoming` — upcoming league events
 - `GET /v1/free/turkey-super-lig/fixtures?view=recent` — recent league events
+- `GET /v1/free/turkey-super-lig/season?season=2025-26` — full season fixture list grouped by round, including available final scores (also supports 2023-24 and 2024-25)
 
 The free source is cached for five minutes to reduce requests. It is **not a guaranteed live-score feed**, and the free tier has lower request limits than premium. Kickoff times and results should be verified with official sources. API-Football endpoints remain available as an optional integration, but the free Turkish league endpoints do not require its API key.
 
