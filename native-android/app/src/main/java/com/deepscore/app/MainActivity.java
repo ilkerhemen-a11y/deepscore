@@ -12,6 +12,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 public final class MainActivity extends Activity {
+    private LinearLayout matchesContainer;
+    private TextView liveEmpty;
+    private LinearLayout note;
     private static final int BG = Color.rgb(8, 13, 25);
     private static final int PANEL = Color.rgb(18, 27, 45);
     private static final int PANEL_LIGHT = Color.rgb(24, 36, 57);
@@ -71,11 +74,24 @@ public final class MainActivity extends Activity {
         filters.setOrientation(LinearLayout.HORIZONTAL);
         filters.setGravity(Gravity.CENTER_VERTICAL);
         String[] filterLabels = {"Tümü", "Canlı", "Yaklaşan"};
+        TextView[] filterChips = new TextView[filterLabels.length];
         for (int i = 0; i < filterLabels.length; i++) {
+            final int selectedIndex = i;
             TextView chip = text(filterLabels[i], 12, i == 0 ? BG : MUTED, true);
             chip.setGravity(Gravity.CENTER);
             chip.setPadding(dp(15), dp(9), dp(15), dp(9));
             chip.setBackground(round(i == 0 ? GREEN : PANEL_LIGHT, 24, i == 0 ? GREEN : LINE));
+            chip.setOnClickListener(v -> {
+                for (int j = 0; j < filterChips.length; j++) {
+                    boolean selected = j == selectedIndex;
+                    filterChips[j].setTextColor(selected ? BG : MUTED);
+                    filterChips[j].setBackground(round(selected ? GREEN : PANEL_LIGHT, 24, selected ? GREEN : LINE));
+                }
+                matchesContainer.setVisibility(selectedIndex == 1 ? View.GONE : View.VISIBLE);
+                liveEmpty.setVisibility(selectedIndex == 1 ? View.VISIBLE : View.GONE);
+                note.setVisibility(selectedIndex == 1 ? View.GONE : View.VISIBLE);
+            });
+            filterChips[i] = chip;
             LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(-2, -2);
             chipLp.rightMargin = dp(8);
             filters.addView(chip, chipLp);
@@ -97,12 +113,27 @@ public final class MainActivity extends Activity {
         sectionLp.bottomMargin = dp(12);
         content.addView(section, sectionLp);
 
-        content.addView(matchCard("SÜPER LİG", "Galatasaray", "Fenerbahçe", "20:00", "Bugün"));
+        matchesContainer = new LinearLayout(this);
+        matchesContainer.setOrientation(LinearLayout.VERTICAL);
+        matchesContainer.addView(matchCard("SÜPER LİG", "Galatasaray", "Fenerbahçe", "20:00", "Örnek"));
         LinearLayout.LayoutParams card2 = new LinearLayout.LayoutParams(-1, -2);
         card2.topMargin = dp(12);
-        content.addView(matchCard("LA LIGA", "Real Madrid", "Barcelona", "22:00", "Bugün"), card2);
+        matchesContainer.addView(matchCard("LA LIGA", "Real Madrid", "Barcelona", "22:00", "Örnek"), card2);
+        content.addView(matchesContainer);
 
-        LinearLayout note = new LinearLayout(this);
+        liveEmpty = new TextView(this);
+        liveEmpty.setText("Şu anda canlı maç verisi bağlı değil. Gerçek skorları bir sonraki aşamada ekleyeceğiz.");
+        liveEmpty.setTextColor(MUTED);
+        liveEmpty.setTextSize(13);
+        liveEmpty.setGravity(Gravity.CENTER);
+        liveEmpty.setPadding(dp(18), dp(24), dp(18), dp(24));
+        liveEmpty.setBackground(round(PANEL, 16, LINE));
+        liveEmpty.setVisibility(View.GONE);
+        LinearLayout.LayoutParams liveEmptyLp = new LinearLayout.LayoutParams(-1, -2);
+        liveEmptyLp.topMargin = dp(12);
+        content.addView(liveEmpty, liveEmptyLp);
+
+        note = new LinearLayout(this);
         note.setOrientation(LinearLayout.VERTICAL);
         note.setPadding(dp(15), dp(14), dp(15), dp(14));
         note.setBackground(round(PANEL, 16, LINE));
