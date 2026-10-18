@@ -48,7 +48,7 @@ export default function App() {
   const toggleSave = (match: Match) => setSaved((current) => current.includes(match.home) ? current.filter((x) => x !== match.home) : [...current, match.home]);
 
   useEffect(() => {
-    if (tab !== "Fikstür") return;
+    if (tab !== "Fikstür" && tab !== "Puan Durumu") return;
     let active = true;
     setFixtureLoading(true);
     setFixtureError("");
@@ -75,6 +75,22 @@ export default function App() {
     (a, b) => Number(a.match(/\d+/)?.[0] ?? 0) - Number(b.match(/\d+/)?.[0] ?? 0)
   );
   const roundFixtures = fixtures.filter((fixture) => fixture.round === selectedRound);
+  const standings = useMemo(() => {
+    const table = new Map<string, { team: string; played: number; won: number; drawn: number; lost: number; gf: number; ga: number; points: number }>();
+    fixtures.filter((fixture) => fixture.home_score !== null && fixture.away_score !== null).forEach((fixture) => {
+      const home = fixture.home_team, away = fixture.away_team;
+      if (!home || !away) return;
+      if (!table.has(home)) table.set(home, { team: home, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 });
+      if (!table.has(away)) table.set(away, { team: away, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, points: 0 });
+      const h = table.get(home)!, a = table.get(away)!;
+      h.played++; a.played++; h.gf += fixture.home_score!; h.ga += fixture.away_score!;
+      a.gf += fixture.away_score!; a.ga += fixture.home_score!;
+      if (fixture.home_score! > fixture.away_score!) { h.won++; h.points += 3; a.lost++; }
+      else if (fixture.home_score! < fixture.away_score!) { a.won++; a.points += 3; h.lost++; }
+      else { h.drawn++; a.drawn++; h.points++; a.points++; }
+    });
+    return Array.from(table.values()).sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+  }, [fixtures]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -126,7 +142,7 @@ export default function App() {
               <View style={styles.teams}><View style={styles.teamCircle}><Text style={styles.teamInitial}>{match.home.slice(0, 1)}</Text></View><Text style={styles.teamName}>{match.home}</Text><Text style={styles.vsSmall}>VS</Text><Text style={styles.teamName}>{match.away}</Text><View style={styles.teamCircle}><Text style={styles.teamInitial}>{match.away.slice(0, 1)}</Text></View></View>
               <View style={styles.cardFooter}><Text style={styles.cardHint}>Maç istatistiklerini görüntüle</Text><Text style={styles.arrow}>›</Text></View>
             </TouchableOpacity>)}
-            <View style={styles.notice}><Text style={styles.noticeTitle}>ℹ  Veri durumu</Text><Text style={styles.noticeText}>Şu an ekranda örnek veriler var. Gerçek fikstür ve tarihsel sonuçlar, veri sağlayıcısı bağlandıktan sonra gösterilecek.</Text></View>
+            <View style={styles.notice}><Text style={styles.noticeTitle}>ℹ  Veri durumu</Text><Text style={styles.noticeText}>Öne çıkan maç kartları örnek veridir. Süper Lig fikstürü ve sezon puan durumu için yukarıdaki kısayolları kullan.</Text></View>
           </>
         ) : tab === "Fikstür" ? (
           <View>
@@ -173,6 +189,28 @@ export default function App() {
               </>
             ) : null}
           </View>
+        ) : tab === "Puan Durumu" ? (
+          <View>
+            <View style={styles.seasonBanner}>
+              <View><Text style={styles.seasonLabel}>TRENDYOL SÜPER LİG</Text><Text style={styles.seasonTitle}>2025–2026 Puan Durumu</Text></View>
+              <View style={styles.countBadge}><Text style={styles.countBadgeText}>{standings.length || "—"} TAKIM</Text></View>
+            </View>
+            <Text style={styles.fixtureSource}>Tamamlanan maçların sonuçlarından hesaplanır: galibiyet 3, beraberlik 1, mağlubiyet 0 puan.</Text>
+            {fixtureLoading ? <View style={styles.card}><Text style={styles.body}>Sezon sonuçları yükleniyor…</Text></View> : null}
+            {fixtureError ? <View style={styles.notice}><Text style={styles.noticeTitle}>Puan durumu yüklenemedi</Text><Text style={styles.noticeText}>{fixtureError}</Text></View> : null}
+            {!fixtureLoading && !fixtureError && standings.length > 0 ? (
+              <View style={styles.standingsTable}>
+                <View style={styles.standingsHeader}><Text style={[styles.standingsCell, styles.posCell]}>#</Text><Text style={[styles.standingsCell, styles.clubCell]}>TAKIM</Text><Text style={styles.standingsCell}>O</Text><Text style={styles.standingsCell}>G</Text><Text style={styles.standingsCell}>B</Text><Text style={styles.standingsCell}>M</Text><Text style={styles.standingsCell}>AV</Text><Text style={[styles.standingsCell, styles.pointsCell]}>P</Text></View>
+                {standings.map((team, index) => <View key={team.team} style={styles.standingsRow}>
+                  <Text style={[styles.standingsCell, styles.posCell, index < 4 && styles.topPosition]}>{index + 1}</Text>
+                  <Text numberOfLines={2} style={[styles.standingsCell, styles.clubCell, styles.clubName]}>{team.team}</Text>
+                  <Text style={styles.standingsCell}>{team.played}</Text><Text style={styles.standingsCell}>{team.won}</Text><Text style={styles.standingsCell}>{team.drawn}</Text><Text style={styles.standingsCell}>{team.lost}</Text>
+                  <Text style={styles.standingsCell}>{team.gf - team.ga > 0 ? "+" : ""}{team.gf - team.ga}</Text><Text style={[styles.standingsCell, styles.pointsCell]}>{team.points}</Text>
+                </View>)}
+              </View>
+            ) : null}
+            <Text style={styles.fixtureFootnote}>Sıralama puan, averaj ve atılan gol ölçütleriyle hesaplanır. Kaynakta eksik sonuç varsa tablo da eksik olabilir.</Text>
+          </View>
         ) : tab === "Tahmin" ? (
           <View style={styles.card}><Text style={styles.sectionTitle}>MODEL LABORATUVARI</Text><Text style={styles.body}>İlk aşamada 1X2 olasılık modeli, gol dağılımı modeli ve makine öğrenmesi modeli karşılaştırılacak.</Text><Text style={styles.body}>Her model zaman sıralı geçmiş testlerde değerlendirilecek. Yeterli veri yoksa sonuçlar gösterilmeyecek.</Text><View style={styles.pill}><Text style={styles.pillText}>GELİŞTİRME AŞAMASINDA</Text></View></View>
         ) : tab === "Sanal kupon" ? (
@@ -181,7 +219,7 @@ export default function App() {
           <View style={styles.card}><Text style={styles.sectionTitle}>PERFORMANSIN</Text><Text style={styles.body}>Tahmin geçmişi ve model başarı ölçümleri, gerçek veri bağlantısı ve kayıt sistemi tamamlandığında burada yer alacak.</Text><View style={styles.pill}><Text style={styles.pillText}>HENÜZ KAYIT YOK</Text></View></View>
         )}
       </ScrollView>
-      <View style={styles.tabBar}>{["Maçlar", "Fikstür", "Tahmin", "Sanal kupon", "Profil"].map((item) => <TouchableOpacity key={item} onPress={() => { setTab(item); setSelected(null); }} style={styles.tabItem}><Text style={[styles.tabText, tab === item && styles.tabActive]}>{item}</Text><View style={[styles.tabIndicator, tab === item && styles.tabIndicatorActive]} /></TouchableOpacity>)}</View>
+      <View style={styles.tabBar}>{["Maçlar", "Tahmin", "Sanal kupon", "Profil"].map((item) => { const active = item === "Maçlar" ? ["Maçlar", "Fikstür", "Puan Durumu"].includes(tab) : tab === item; return <TouchableOpacity key={item} onPress={() => { setTab(item); setSelected(null); }} style={styles.tabItem}><Text style={[styles.tabText, active && styles.tabActive]}>{item}</Text><View style={[styles.tabIndicator, active && styles.tabIndicatorActive]} /></TouchableOpacity>; })}</View>
     </SafeAreaView>
   );
 }
@@ -233,6 +271,20 @@ const styles = StyleSheet.create({
   notice: { backgroundColor: "#1B2432", borderRadius: 13, padding: 14, marginTop: 7, borderWidth: 1, borderColor: "#3B4658" },
   noticeTitle: { color: COLORS.amber, fontSize: 12, fontWeight: "800", marginBottom: 5 },
   noticeText: { color: "#B7C2D3", fontSize: 11, lineHeight: 17 },
+  homeQuickLinks: { flexDirection: "row", gap: 10, marginBottom: 22 },
+  homeQuickLink: { flex: 1, backgroundColor: COLORS.panel, borderRadius: 15, borderWidth: 1, borderColor: COLORS.border, padding: 14 },
+  homeQuickIcon: { color: COLORS.green, fontSize: 22, fontWeight: "900", marginBottom: 7 },
+  homeQuickTitle: { color: COLORS.text, fontSize: 13, fontWeight: "900" },
+  homeQuickSubtitle: { color: COLORS.muted, fontSize: 10, marginTop: 4 },
+  standingsTable: { backgroundColor: COLORS.panel, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, overflow: "hidden", marginBottom: 12 },
+  standingsHeader: { flexDirection: "row", alignItems: "center", backgroundColor: "#1A2940", paddingHorizontal: 7, paddingVertical: 11 },
+  standingsRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 7, paddingVertical: 11, borderTopWidth: 1, borderTopColor: COLORS.border },
+  standingsCell: { color: "#D7DFEC", width: 24, textAlign: "center", fontSize: 9, fontWeight: "700" },
+  posCell: { width: 20, color: COLORS.muted },
+  clubCell: { flex: 1, width: undefined, textAlign: "left", paddingRight: 4 },
+  clubName: { color: COLORS.text, fontSize: 10, fontWeight: "800" },
+  pointsCell: { width: 25, color: COLORS.green, fontWeight: "900" },
+  topPosition: { color: COLORS.green, fontWeight: "900" },
   seasonBanner: { backgroundColor: "#122238", borderRadius: 16, borderWidth: 1, borderColor: "#28425E", padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   seasonLabel: { color: COLORS.green, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
   seasonTitle: { color: COLORS.text, fontSize: 20, fontWeight: "900", marginTop: 5 },
