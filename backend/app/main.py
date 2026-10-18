@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from app.provider_routes import router as provider_router
+from app.free_provider_routes import router as free_provider_router
 from app.historical_model import router as historical_model_router
 
 app = FastAPI(
@@ -18,6 +19,7 @@ app = FastAPI(
 
 
 app.include_router(provider_router)
+app.include_router(free_provider_router)
 app.include_router(historical_model_router)
 
 
@@ -67,7 +69,7 @@ def health() -> dict[str, str]:
     return {
         "status": "ok",
         "service": "deepscore-api",
-        "data_mode": "historical_model_and_provider_configured" if configured else "historical_model",
+        "data_mode": "historical_model_free_and_provider_configured" if configured else "historical_model_and_free_provider",
     }
 
 
