@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import json
 import time
 from threading import Lock
@@ -145,7 +147,11 @@ def turkey_super_lig_season(
             "away_team": match.get("team2"),
             "home_score": home_score,
             "away_score": away_score,
-            "status": "finished" if home_score is not None and away_score is not None else "scheduled",
+            "status": (
+                "finished" if home_score is not None and away_score is not None
+                else "scheduled" if (match.get("date") or "9999-99-99") >= date.today().isoformat()
+                else "result_unavailable"
+            ),
         })
 
     fixtures.sort(key=lambda item: (item.get("date") or "9999-99-99", item.get("time") or "99:99", item["round"]))
