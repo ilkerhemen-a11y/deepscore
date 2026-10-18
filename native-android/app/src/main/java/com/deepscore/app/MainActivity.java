@@ -654,7 +654,7 @@ public final class MainActivity extends Activity {
     private JSONObject apiRequest(String path, JSONObject body) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(API_BASE + path).openConnection();
         connection.setConnectTimeout(12000);
-        connection.setReadTimeout(18000);
+        connection.setReadTimeout(45000);
         connection.setRequestProperty("Accept", "application/json");
         if (body != null) {
             connection.setRequestMethod("POST");
