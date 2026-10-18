@@ -37,6 +37,9 @@ public final class MainActivity extends Activity {
     private boolean archiveLoading = false;
     private boolean archiveLoaded = false;
     private String archiveMessage = "";
+    private int archiveTotal = 0;
+    private int archiveApiCount = 0;
+    private boolean archiveLoadingMore = false;
     private boolean teamsLoading = false;
     private boolean teamsLoaded = false;
     private String teamsMessage = "";
@@ -139,6 +142,8 @@ public final class MainActivity extends Activity {
         addText(content, archive
                 ? "Geçmiş sezonlardan tamamlanmış karşılaşmalar."
                 : "Geçmiş maçlar ve kesinleşmiş skorlar.", 14, MUTED, false, 5);
+        if (archiveLoading) addText(content, "Tarihsel sonuçlar sunucudan yükleniyor…", 12, MUTED, false, 10);
+        if (!archiveMessage.isEmpty()) addText(content, archiveMessage, 12, Color.rgb(255, 171, 105), false, 10);
 
         LinearLayout filters = new LinearLayout(this);
         filters.setOrientation(LinearLayout.HORIZONTAL);
@@ -195,6 +200,13 @@ public final class MainActivity extends Activity {
             archiveButton.setPadding(dp(12), dp(16), dp(12), dp(12));
             archiveButton.setOnClickListener(v -> { activeTab = "Arşiv"; renderPage(); updateNav(); });
             content.addView(archiveButton);
+        } else if (archiveApiCount < archiveTotal) {
+            TextView more = text(archiveLoadingMore ? "Daha fazla maç yükleniyor…" : "Daha fazla maç yükle  ↓", 13, GREEN, true);
+            more.setGravity(Gravity.CENTER);
+            more.setPadding(dp(12), dp(18), dp(12), dp(18));
+            more.setOnClickListener(v -> { if (!archiveLoadingMore) loadMoreHistoricalArchive(); });
+            content.addView(more);
+            addText(content, archiveApiCount + " / " + archiveTotal + " tarihsel Süper Lig maçı yüklendi", 11, MUTED, false, 2);
         }
         pageContent.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
     }
@@ -540,6 +552,7 @@ public final class MainActivity extends Activity {
             String error = "";
             try {
                 JSONObject json = apiGet("/v1/historical/matches?limit=500&offset=0");
+                archiveTotal = json.optInt("total", 0);
                 JSONArray array = json.optJSONArray("matches");
                 if (array != null) {
                     for (int i = 0; i < array.length(); i++) {
@@ -564,12 +577,66 @@ public final class MainActivity extends Activity {
                 archiveLoading = false;
                 archiveLoaded = true;
                 archiveMessage = finalError;
+                archiveApiCount = finalMatches.size();
                 if (!finalMatches.isEmpty()) {
                     List<Match> nonSuperLig = new ArrayList<>();
                     for (Match old : matches) if (!"SÜPER LİG".equals(old.league)) nonSuperLig.add(old);
                     matches.clear();
                     matches.addAll(finalMatches);
                     matches.addAll(nonSuperLig);
+                }
+                if (selectedMatch == null) renderPage();
+            });
+        }).start();
+    }
+
+    private void loadMoreHistoricalArchive() {
+        if (archiveLoadingMore || archiveApiCount >= archiveTotal) return;
+        archiveLoadingMore = true;
+        new Thread(() -> {
+            List<Match> downloaded = new ArrayList<>();
+            String error = "";
+            int total = archiveTotal;
+            try {
+                JSONObject json = apiGet("/v1/historical/matches?limit=500&offset=" + archiveApiCount);
+                JSONArray array = json.optJSONArray("matches");
+                total = json.optInt("total", archiveTotal);
+                if (array != null) {
+                    for (int i = 0; i < array.length(); i++) {
+                        JSONObject item = array.optJSONObject(i);
+                        if (item == null) continue;
+                        String date = item.optString("date", "");
+                        String[] parts = date.split("-");
+                        if (parts.length == 3) date = parts[2] + "." + parts[1] + "." + parts[0];
+                        String season = item.optString("season", "");
+                        downloaded.add(new Match("SÜPER LİG", item.optString("home"), item.optString("away"),
+                                String.valueOf(item.optInt("home_goals")), String.valueOf(item.optInt("away_goals")),
+                                date, "Kaynakta belirtilmemiş", "OpenFootball tarihsel arşivi · " + season, season));
+                    }
+                }
+                if (downloaded.isEmpty()) error = "Yeni maç alınamadı. Biraz sonra tekrar deneyin.";
+            } catch (Exception ex) {
+                error = "Daha fazla maç yüklenemedi. İnternet bağlantısını kontrol edin.";
+            }
+            final String finalError = error;
+            final int finalTotal = total;
+            final List<Match> finalMatches = downloaded;
+            runOnUiThread(() -> {
+                archiveLoadingMore = false;
+                archiveMessage = finalError;
+                archiveTotal = finalTotal;
+                if (!finalMatches.isEmpty()) {
+                    List<Match> superLig = new ArrayList<>();
+                    List<Match> otherLeagues = new ArrayList<>();
+                    for (Match old : matches) {
+                        if ("SÜPER LİG".equals(old.league)) superLig.add(old);
+                        else otherLeagues.add(old);
+                    }
+                    superLig.addAll(finalMatches);
+                    matches.clear();
+                    matches.addAll(superLig);
+                    matches.addAll(otherLeagues);
+                    archiveApiCount += finalMatches.size();
                 }
                 if (selectedMatch == null) renderPage();
             });
