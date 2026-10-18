@@ -22,7 +22,7 @@ type Fixture = {
   away_team: string;
   home_score: number | null;
   away_score: number | null;
-  status: "finished" | "scheduled";
+  status: "finished" | "scheduled" | "result_unavailable";
 };
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "https://deepscore-api.onrender.com";
@@ -157,12 +157,12 @@ export default function App() {
                   <View key={`${fixture.date}-${fixture.home_team}-${fixture.away_team}-${index}`} style={styles.fixtureCard}>
                     <View style={styles.fixtureMeta}>
                       <Text style={styles.fixtureDate}>{fixture.date ? new Date(fixture.date + "T12:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "short" }) : "Tarih yok"}</Text>
-                      <Text style={styles.fixtureStatus}>{fixture.status === "finished" ? "TAMAMLANDI" : "PROGRAMDA"}</Text>
+                      <Text style={styles.fixtureStatus}>{fixture.status === "finished" ? "TAMAMLANDI" : fixture.status === "scheduled" ? "PROGRAMDA" : "SONUÇ KAYNAKTA YOK"}</Text>
                     </View>
                     <View style={styles.fixtureTeams}>
                       <Text numberOfLines={2} style={styles.fixtureTeam}>{fixture.home_team}</Text>
                       <View style={styles.fixtureScoreBox}>
-                        {fixture.status === "finished" ? <Text style={styles.fixtureScore}>{fixture.home_score} : {fixture.away_score}</Text> : <Text style={styles.fixtureTime}>{fixture.time || "—"}</Text>}
+                        {fixture.status === "finished" ? <Text style={styles.fixtureScore}>{fixture.home_score} : {fixture.away_score}</Text> : <Text style={styles.fixtureTime}>{fixture.status === "scheduled" ? (fixture.time || "—") : "—"}</Text>}
                       </View>
                       <Text numberOfLines={2} style={[styles.fixtureTeam, styles.fixtureAway]}>{fixture.away_team}</Text>
                     </View>
