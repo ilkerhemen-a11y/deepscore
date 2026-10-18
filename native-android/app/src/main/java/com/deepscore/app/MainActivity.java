@@ -380,7 +380,7 @@ public final class MainActivity extends Activity {
             double combined = 1.0;
             String raw = oddsCombinedInput.getText().toString().trim();
             if (!raw.isEmpty()) {
-                String[] pieces = raw.split("[,;\\s]+");
+                String[] pieces = raw.split("[;\\s]+");
                 for (String piece : pieces) {
                     double odd = Double.parseDouble(piece.replace(",", "."));
                     if (odd <= 1) throw new IllegalArgumentException();
