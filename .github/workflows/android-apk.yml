@@ -2,7 +2,7 @@ name: Build DeepScore Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/prediction-lab]
     paths:
       - "mobile/**"
       - ".github/workflows/android-apk.yml"
@@ -48,3 +48,32 @@ jobs:
           path: mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
+      - name: Enable emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Verify release startup on Android 12
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 31
+          arch: x86_64
+          target: google_apis
+          working-directory: mobile
+          script: |
+            adb install -r android/app/build/outputs/apk/release/app-release.apk
+            adb logcat -c
+            adb shell am start -W -n com.deepscore.app/.MainActivity
+            sleep 15
+            adb logcat -d > startup-logcat.txt
+            adb exec-out screencap -p > startup.png
+            adb shell uiautomator dump /sdcard/window.xml
+            adb pull /sdcard/window.xml startup-window.xml
+            adb shell pidof com.deepscore.app
+      - name: Upload startup diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-startup-diagnostics
+          path: |
+            mobile/startup-logcat.txt
+            mobile/startup.png
+            mobile/startup-window.xml
+          if-no-files-found: warn
