@@ -1,0 +1,54 @@
+name: Diagnose Android startup
+on:
+  push:
+    branches: [codex/prediction-lab]
+    paths: [".github/workflows/android-startup.yml"]
+  workflow_dispatch:
+    inputs:
+      apk_run_id:
+        description: Build run containing deepscore-android-apk
+        default: "39122806972"
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  startup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepscore-android-apk
+          path: apk
+          run-id: ${{ inputs.apk_run_id || '39122806972' }}
+          github-token: ${{ github.token }}
+      - name: Enable emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Launch release APK on Android 12
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 31
+          arch: x86_64
+          target: google_apis
+          script: |
+            adb install -r apk/app-release.apk
+            adb logcat -c
+            adb shell am start -W -n com.deepscore.app/.MainActivity
+            sleep 15
+            adb logcat -d > startup-logcat.txt
+            adb exec-out screencap -p > startup.png
+            adb shell uiautomator dump /sdcard/window.xml
+            adb pull /sdcard/window.xml startup-window.xml
+            adb shell pidof com.deepscore.app
+      - name: Preserve startup diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-startup-diagnostics
+          path: |
+            startup-logcat.txt
+            startup.png
+            startup-window.xml
+          if-no-files-found: warn
+          retention-days: 7
