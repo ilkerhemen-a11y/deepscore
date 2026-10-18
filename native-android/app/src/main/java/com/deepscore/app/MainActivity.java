@@ -61,6 +61,29 @@ public final class MainActivity extends Activity {
     private String pendingVirtualMatch = "";
     private String virtualBetMessage = "";
 
+    private boolean seasonLoading = false;
+    private boolean seasonLoaded = false;
+    private String seasonMessage = "";
+    private String seasonSource = "";
+    private String selectedSeasonRound = "Tümü";
+    private final List<SeasonFixture> seasonFixtures = new ArrayList<>();
+
+    private static final class SeasonFixture {
+        final String round, date, time, home, away, homeScore, awayScore, status;
+        SeasonFixture(String round, String date, String time, String home, String away,
+                      String homeScore, String awayScore, String status) {
+            this.round = round;
+            this.date = date;
+            this.time = time;
+            this.home = home;
+            this.away = away;
+            this.homeScore = homeScore;
+            this.awayScore = awayScore;
+            this.status = status;
+        }
+        boolean hasScore() { return !homeScore.isEmpty() && !awayScore.isEmpty(); }
+    }
+
     private static final int BG = Color.rgb(8, 13, 25);
     private static final int PANEL = Color.rgb(18, 27, 45);
     private static final int PANEL_LIGHT = Color.rgb(24, 36, 57);
@@ -135,11 +158,208 @@ public final class MainActivity extends Activity {
         }
         switch (activeTab) {
             case "Arşiv": renderMatches(true); break;
+            case "Fikstür": renderSeasonFixtures(); break;
             case "Tahminler": renderPredictions(); break;
             case "Sanal Kupon": renderVirtualBets(); break;
             case "Profil": renderProfile(); break;
             default: renderMatches(false); break;
         }
+    }
+
+    private void renderSeasonFixtures() {
+        if (!seasonLoaded && !seasonLoading) loadSeasonFixtures();
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(18), dp(16), dp(18), dp(28));
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+
+        addHeader(content);
+        addText(content, "Süper Lig Fikstürü", 26, WHITE, true, 24);
+        addText(content, "2025–2026 sezonu · 38 hafta · 306 karşılaşma", 13, MUTED, false, 5);
+        LinearLayout sourcePanel = infoPanel("SEZON ARŞİVİ",
+                "Fikstür sunucudan yüklenir. Kaynakta kesin skor bulunmayan maçlar için skor uydurulmaz.");
+        LinearLayout.LayoutParams sourceLp = new LinearLayout.LayoutParams(-1, -2);
+        sourceLp.topMargin = dp(16);
+        content.addView(sourcePanel, sourceLp);
+
+        if (seasonLoading) {
+            addText(content, "2025–2026 fikstürü yükleniyor…", 13, MUTED, false, 18);
+        }
+        if (!seasonMessage.isEmpty()) {
+            TextView message = text(seasonMessage, 12, Color.rgb(255, 171, 105), false);
+            message.setPadding(dp(12), dp(12), dp(12), dp(12));
+            message.setBackground(round(PANEL, 12, LINE));
+            LinearLayout.LayoutParams messageLp = new LinearLayout.LayoutParams(-1, -2);
+            messageLp.topMargin = dp(14);
+            content.addView(message, messageLp);
+            TextView retry = text("YENİDEN DENE  ↻", 13, GREEN, true);
+            retry.setGravity(Gravity.CENTER);
+            retry.setPadding(dp(12), dp(14), dp(12), dp(14));
+            retry.setOnClickListener(v -> {
+                seasonLoaded = false;
+                seasonMessage = "";
+                renderPage();
+            });
+            content.addView(retry);
+        }
+        if (seasonLoaded && !seasonFixtures.isEmpty()) {
+            addText(content, seasonFixtures.size() + " karşılaşma yüklendi", 12, GREEN, true, 16);
+            if (!seasonSource.isEmpty()) addText(content, "Kaynak: " + seasonSource, 10, MUTED, false, 4);
+
+            List<String> rounds = new ArrayList<>();
+            rounds.add("Tümü");
+            for (SeasonFixture fixture : seasonFixtures) {
+                if (!rounds.contains(fixture.round)) rounds.add(fixture.round);
+            }
+            Spinner roundSpinner = new Spinner(this);
+            ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, rounds) {
+                @Override public View getView(int position, View convertView, android.view.ViewGroup parent) {
+                    TextView label = (TextView) super.getView(position, convertView, parent);
+                    label.setTextColor(WHITE);
+                    label.setTextSize(14);
+                    label.setPadding(dp(12), dp(8), dp(8), dp(8));
+                    return label;
+                }
+                @Override public View getDropDownView(int position, View convertView, android.view.ViewGroup parent) {
+                    TextView label = (TextView) super.getDropDownView(position, convertView, parent);
+                    label.setTextColor(WHITE);
+                    label.setPadding(dp(14), dp(12), dp(14), dp(12));
+                    label.setBackgroundColor(PANEL);
+                    return label;
+                }
+            };
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            roundSpinner.setAdapter(adapter);
+            roundSpinner.setBackground(round(PANEL_LIGHT, 12, LINE));
+            int selectedIndex = rounds.indexOf(selectedSeasonRound);
+            roundSpinner.setSelection(selectedIndex < 0 ? 0 : selectedIndex);
+            LinearLayout.LayoutParams spinnerLp = new LinearLayout.LayoutParams(-1, dp(52));
+            spinnerLp.topMargin = dp(14);
+            content.addView(roundSpinner, spinnerLp);
+
+            LinearLayout fixturesList = new LinearLayout(this);
+            fixturesList.setOrientation(LinearLayout.VERTICAL);
+            LinearLayout.LayoutParams listLp = new LinearLayout.LayoutParams(-1, -2);
+            listLp.topMargin = dp(10);
+            content.addView(fixturesList, listLp);
+            Runnable populate = () -> {
+                fixturesList.removeAllViews();
+                int shown = 0;
+                for (SeasonFixture fixture : seasonFixtures) {
+                    if (!"Tümü".equals(selectedSeasonRound) && !selectedSeasonRound.equals(fixture.round)) continue;
+                    LinearLayout card = new LinearLayout(this);
+                    card.setOrientation(LinearLayout.VERTICAL);
+                    card.setPadding(dp(13), dp(12), dp(13), dp(13));
+                    card.setBackground(round(PANEL, 14, LINE));
+                    LinearLayout top = new LinearLayout(this);
+                    top.setGravity(Gravity.CENTER_VERTICAL);
+                    top.addView(text(fixture.round, 10, GREEN, true), new LinearLayout.LayoutParams(0, -2, 1));
+                    String dateLabel = formatFixtureDate(fixture.date);
+                    if (!fixture.time.isEmpty()) dateLabel += "  " + fixture.time;
+                    top.addView(text(dateLabel, 10, MUTED, true));
+                    card.addView(top);
+                    LinearLayout teams = new LinearLayout(this);
+                    teams.setGravity(Gravity.CENTER_VERTICAL);
+                    TextView home = text(fixture.home, 12, WHITE, true);
+                    home.setMaxLines(2);
+                    teams.addView(home, new LinearLayout.LayoutParams(0, -2, 1));
+                    String score = fixture.hasScore() ? fixture.homeScore + " - " + fixture.awayScore : "— : —";
+                    TextView scoreView = text(score, 16, fixture.hasScore() ? WHITE : MUTED, true);
+                    scoreView.setGravity(Gravity.CENTER);
+                    scoreView.setPadding(dp(7), dp(7), dp(7), dp(7));
+                    scoreView.setBackground(round(PANEL_LIGHT, 10, LINE));
+                    teams.addView(scoreView, new LinearLayout.LayoutParams(-2, -2));
+                    TextView away = text(fixture.away, 12, WHITE, true);
+                    away.setGravity(Gravity.RIGHT);
+                    away.setMaxLines(2);
+                    LinearLayout.LayoutParams awayLp = new LinearLayout.LayoutParams(0, -2, 1);
+                    awayLp.leftMargin = dp(8);
+                    teams.addView(away, awayLp);
+                    LinearLayout.LayoutParams teamsLp = new LinearLayout.LayoutParams(-1, -2);
+                    teamsLp.topMargin = dp(10);
+                    card.addView(teams, teamsLp);
+                    TextView status = text(fixture.hasScore() ? "✓  Skor mevcut" : "Skor kaynakta doğrulanmamış", 10,
+                            fixture.hasScore() ? GREEN : MUTED, false);
+                    LinearLayout.LayoutParams statusLp = new LinearLayout.LayoutParams(-1, -2);
+                    statusLp.topMargin = dp(8);
+                    card.addView(status, statusLp);
+                    LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, -2);
+                    cardLp.topMargin = dp(9);
+                    fixturesList.addView(card, cardLp);
+                    shown++;
+                }
+                if (shown == 0) addText(fixturesList, "Bu haftada karşılaşma bulunamadı.", 12, MUTED, false, 12);
+            };
+            roundSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    String next = rounds.get(position);
+                    if (!next.equals(selectedSeasonRound)) {
+                        selectedSeasonRound = next;
+                        populate.run();
+                    }
+                }
+                @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+            });
+            populate.run();
+        }
+        pageContent.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+    }
+
+    private String formatFixtureDate(String value) {
+        if (value == null || value.isEmpty()) return "Tarih yok";
+        String[] parts = value.split("-");
+        if (parts.length == 3) return parts[2] + "." + parts[1] + "." + parts[0];
+        return value;
+    }
+
+    private void loadSeasonFixtures() {
+        if (seasonLoading) return;
+        seasonLoading = true;
+        seasonMessage = "";
+        new Thread(() -> {
+            List<SeasonFixture> downloaded = new ArrayList<>();
+            String error = "";
+            String source = "";
+            try {
+                JSONObject json = apiGet("/v1/free/turkey-super-lig/season?season=2025-26");
+                JSONArray array = json.optJSONArray("fixtures");
+                source = json.optString("source", "");
+                if (array != null) {
+                    for (int i = 0; i < array.length(); i++) {
+                        JSONObject item = array.optJSONObject(i);
+                        if (item == null) continue;
+                        String homeScore = item.isNull("home_score") ? "" : item.optString("home_score", "");
+                        String awayScore = item.isNull("away_score") ? "" : item.optString("away_score", "");
+                        downloaded.add(new SeasonFixture(
+                                item.optString("round", "Tur bilgisi yok"),
+                                item.optString("date", ""),
+                                item.optString("time", ""),
+                                item.optString("home_team", "Ev sahibi"),
+                                item.optString("away_team", "Deplasman"),
+                                homeScore, awayScore,
+                                item.optString("status", "unknown")));
+                    }
+                }
+                if (downloaded.isEmpty()) error = "Sunucu sezon fikstürünü boş döndürdü.";
+            } catch (Exception ex) {
+                error = "2025–2026 fikstürüne ulaşılamadı. İnternet bağlantısını kontrol edip yeniden deneyebilirsin.";
+            }
+            final String finalError = error;
+            final String finalSource = source;
+            final List<SeasonFixture> finalFixtures = downloaded;
+            runOnUiThread(() -> {
+                seasonLoading = false;
+                seasonLoaded = true;
+                seasonMessage = finalError;
+                seasonSource = finalSource;
+                seasonFixtures.clear();
+                seasonFixtures.addAll(finalFixtures);
+                if ("Fikstür".equals(activeTab) && selectedMatch == null) renderPage();
+            });
+        }).start();
     }
 
     private void renderMatches(boolean archive) {
@@ -1032,8 +1252,8 @@ public final class MainActivity extends Activity {
         nav.setGravity(Gravity.CENTER_VERTICAL);
         nav.setPadding(dp(6), dp(7), dp(6), dp(7));
         nav.setBackground(round(PANEL, 0, LINE));
-        String[] labels = {"Maçlar", "Arşiv", "Tahminler", "Sanal Kupon", "Profil"};
-        String[] icons = {"⌂", "▤", "◇", "🎟", "◉"};
+        String[] labels = {"Maçlar", "Fikstür", "Arşiv", "Tahminler", "Sanal Kupon", "Profil"};
+        String[] icons = {"⌂", "▦", "▤", "◇", "🎟", "◉"};
         for (int i = 0; i < labels.length; i++) {
             final String tab = labels[i];
             boolean selected = tab.equals(activeTab) && selectedMatch == null;
