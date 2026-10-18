@@ -30,7 +30,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v6
         with:
-          name: deepscore-home-screen-v2-apk
+          name: deepscore-home-screen-v3-apk
           path: native-android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
