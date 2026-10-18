@@ -4,7 +4,7 @@ import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
 
-from app.historical_model import Match, expected_goals, historical_backtest, parse_season, score_grid
+from app.historical_model import Match, expected_goals, historical_backtest, historical_matches, historical_teams, parse_season, score_grid
 
 
 class HistoricalModelTests(unittest.TestCase):
@@ -56,6 +56,32 @@ class HistoricalModelTests(unittest.TestCase):
         self.assertIn("historical_outcome_frequency_brier_score", result["baselines"])
         self.assertIn("historical_outcome_frequency_log_loss", result["baselines"])
         self.assertIsNotNone(result["improvement_vs_historical_majority_accuracy_percentage_points"])
+
+    def test_historical_matches_are_paginated_and_sorted_newest_first(self) -> None:
+        matches = (
+            Match(date(2024, 8, 1), "Alpha", "Beta", 2, 0, "2024-25"),
+            Match(date(2025, 2, 1), "Gamma", "Alpha", 1, 1, "2024-25"),
+            Match(date(2024, 9, 1), "Beta", "Gamma", 0, 3, "2024-25"),
+        )
+        with patch("app.historical_model.get_data", return_value=matches):
+            result = historical_matches(limit=2, offset=0)
+            filtered = historical_matches(team="alpha", limit=10, offset=0)
+        self.assertEqual(result["total"], 3)
+        self.assertEqual(result["count"], 2)
+        self.assertTrue(result["has_more"])
+        self.assertEqual(result["matches"][0]["date"], "2025-02-01")
+        self.assertEqual(filtered["total"], 2)
+        self.assertTrue(all("Alpha" in (m["home"], m["away"]) for m in filtered["matches"]))
+
+    def test_historical_team_list_is_deduplicated(self) -> None:
+        matches = (
+            Match(date(2024, 8, 1), "Alpha", "Beta", 2, 0, "2024-25"),
+            Match(date(2024, 8, 8), "Beta", "Gamma", 1, 1, "2024-25"),
+        )
+        with patch("app.historical_model.get_data", return_value=matches):
+            result = historical_teams()
+        self.assertEqual(result["count"], 3)
+        self.assertEqual(result["teams"], ["Alpha", "Beta", "Gamma"])
 
     def test_team_goal_rates_use_historical_match_results(self) -> None:
         history = [
