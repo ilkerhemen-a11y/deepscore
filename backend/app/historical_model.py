@@ -19,12 +19,15 @@ router = APIRouter(prefix="/v1/historical", tags=["historical-model"])
 # OpenFootball's Europe repository dedicates its football.db data to the public domain.
 # We consume completed scores only; no live-score claim or live provider is involved.
 DATA_URLS = {
+    "2018-19": "https://raw.githubusercontent.com/openfootball/europe/master/turkey/2018-19_tr1.txt",
+    "2019-20": "https://raw.githubusercontent.com/openfootball/europe/master/turkey/2019-20_tr1.txt",
+    "2020-21": "https://raw.githubusercontent.com/openfootball/europe/master/turkey/2020-21_tr1.txt",
     "2023-24": "https://raw.githubusercontent.com/openfootball/europe/master/turkey/2023-24_tr1.txt",
     "2024-25": "https://raw.githubusercontent.com/openfootball/europe/master/turkey/2024-25_tr1.txt",
     "2025-26": "https://raw.githubusercontent.com/openfootball/europe/master/turkey/2025-26_tr1.txt",
 }
 SOURCE = "OpenFootball Europe / Turkey Süper Lig (public-domain data)"
-SEASON_STARTS = {"2023-24": 2023, "2024-25": 2024, "2025-26": 2025}
+SEASON_STARTS = {"2018-19": 2018, "2019-20": 2019, "2020-21": 2020, "2023-24": 2023, "2024-25": 2024, "2025-26": 2025}
 MONTHS = {name: number for number, name in enumerate(
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1
 )}
@@ -198,6 +201,63 @@ def model_status() -> dict[str, Any]:
         "model": "season_weighted_smoothed_poisson",
         "live_scores": False,
         "warning": "Predictions are statistical estimates, not guarantees. Historical data may be incomplete or corrected upstream.",
+    }
+
+
+@router.get("/teams")
+def historical_teams() -> dict[str, Any]:
+    """Return normalized team choices available in the historical archive."""
+    matches = get_data()
+    teams = sorted({team for match in matches for team in (match.home, match.away)}, key=normalize)
+    return {
+        "source": SOURCE,
+        "teams": teams,
+        "count": len(teams),
+        "seasons": list(DATA_URLS),
+        "live_scores": False,
+    }
+
+
+@router.get("/matches")
+def historical_matches(
+    team: str | None = Query(default=None, min_length=1, max_length=100),
+    season: str | None = Query(default=None, pattern=r"^\\d{4}-\\d{2}$"),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0, le=10000),
+) -> dict[str, Any]:
+    """Paginated completed historical results, newest first."""
+    matches = list(get_data())
+    if team:
+        team_key = normalize(team)
+        matches = [match for match in matches if team_key in (normalize(match.home), normalize(match.away))]
+    if season:
+        matches = [match for match in matches if match.season == season]
+    matches.sort(key=lambda match: (match.date, match.season, normalize(match.home), normalize(match.away)), reverse=True)
+    total = len(matches)
+    page = matches[offset:offset + limit]
+    return {
+        "source": SOURCE,
+        "league": "Süper Lig",
+        "count": len(page),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(page) < total,
+        "seasons": list(DATA_URLS),
+        "live_scores": False,
+        "matches": [
+            {
+                "date": match.date.isoformat(),
+                "home": match.home,
+                "away": match.away,
+                "home_goals": match.home_goals,
+                "away_goals": match.away_goals,
+                "score": f"{match.home_goals}-{match.away_goals}",
+                "season": match.season,
+                "status": "completed",
+            }
+            for match in page
+        ],
     }
 
 
