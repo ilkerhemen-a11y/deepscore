@@ -94,3 +94,70 @@ def turkey_super_lig_fixtures(
 ) -> dict[str, Any]:
     """Return the provider's next or most recent league events."""
     return _fetch_events(view)
+
+
+# OpenFootball publishes the full Turkish Süper Lig season archive as public-domain JSON.
+SEASON_ARCHIVE_BASE = "https://raw.githubusercontent.com/openfootball/football.json/master"
+_SEASON_CACHE_SECONDS = 21600
+_season_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+@router.get("/turkey-super-lig/season")
+def turkey_super_lig_season(
+    season: str = Query(default="2025-26", pattern=r"^(2023-24|2024-25|2025-26)$"),
+) -> dict[str, Any]:
+    """Return the complete season schedule and final scores from the public-domain archive."""
+    now = time.monotonic()
+    with _cache_lock:
+        cached = _season_cache.get(season)
+        if cached and now - cached[0] < _SEASON_CACHE_SECONDS:
+            return cached[1]
+
+    url = f"{SEASON_ARCHIVE_BASE}/{season}/tr.1.json"
+    request = Request(url, headers={"Accept": "application/json", "User-Agent": "DeepScore/1.0"})
+    try:
+        with urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Season archive returned HTTP {exc.code}.") from exc
+    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=502, detail="Season archive is temporarily unavailable or returned invalid JSON.") from exc
+
+    raw_matches = payload.get("matches") if isinstance(payload, dict) else None
+    if not isinstance(raw_matches, list):
+        raise HTTPException(status_code=502, detail="Season archive did not contain a valid match list.")
+
+    fixtures: list[dict[str, Any]] = []
+    for match in raw_matches:
+        if not isinstance(match, dict):
+            continue
+        score = match.get("score")
+        full_time = score.get("ft") if isinstance(score, dict) else score if isinstance(score, list) else None
+        if not isinstance(full_time, list) or len(full_time) < 2:
+            home_score = away_score = None
+        else:
+            home_score, away_score = full_time[0], full_time[1]
+        fixtures.append({
+            "round": str(match.get("round") or "Tur bilgisi yok"),
+            "date": match.get("date"),
+            "time": match.get("time"),
+            "home_team": match.get("team1"),
+            "away_team": match.get("team2"),
+            "home_score": home_score,
+            "away_score": away_score,
+            "status": "finished" if home_score is not None and away_score is not None else "scheduled",
+        })
+
+    fixtures.sort(key=lambda item: (item.get("date") or "9999-99-99", item.get("time") or "99:99", item["round"]))
+    result = {
+        "source": "OpenFootball / football.json (public-domain archive)",
+        "competition": "Turkish Süper Lig",
+        "season": season,
+        "count": len(fixtures),
+        "finished_count": sum(1 for item in fixtures if item["status"] == "finished"),
+        "fixtures": fixtures,
+        "notice": "Historical schedule/results archive; kickoff times are shown as published by the source and may need official verification.",
+    }
+    with _cache_lock:
+        _season_cache[season] = (time.monotonic(), result)
+    return result
