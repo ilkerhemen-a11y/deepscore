@@ -693,11 +693,11 @@ public final class MainActivity extends Activity {
         addHeader(content);
         addText(content, "Uygulama", 27, WHITE, true, 26);
         addText(content, "DeepScore sürüm bilgileri", 14, MUTED, false, 5);
-        LinearLayout panel = infoPanel("DEEPSCORE ANDROID", "Geçmiş maç arşivi, lig filtreleri ve maç detayları içeren yerel Android sürümü.");
+        LinearLayout panel = infoPanel("DEEPSCORE ANDROID", "Genişletilmiş tarihsel maç arşivi ve geçmiş verilere dayalı tahmin merkezi.");
         LinearLayout.LayoutParams panelLp = new LinearLayout.LayoutParams(-1, -2);
         panelLp.topMargin = dp(20);
         content.addView(panel, panelLp);
-        addInfoRow(content, "Sürüm", "0.5.0");
+        addInfoRow(content, "Sürüm", "0.6.0");
         addInfoRow(content, "Arşivdeki maç", String.valueOf(matches.size()));
         addInfoRow(content, "Canlı veri", "Bağlı değil");
         addInfoRow(content, "Tahminler", "Veri kaynağı bekleniyor");
