@@ -7,7 +7,10 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
+import android.view.animation.AlphaAnimation;
+import android.view.animation.Animation;
 import android.widget.ArrayAdapter;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
@@ -49,6 +52,14 @@ public final class MainActivity extends Activity {
     private final List<String> teamNames = new ArrayList<>();
     private String selectedHomeTeam = "";
     private String selectedAwayTeam = "";
+    private String selectedVirtualMarket = "Ev sahibi kazanır";
+    private int virtualBalance = 1000;
+    private int pendingVirtualStake = 0;
+    private double pendingVirtualProbability = 0.0;
+    private double pendingVirtualOdds = 0.0;
+    private String pendingVirtualMarket = "";
+    private String pendingVirtualMatch = "";
+    private String virtualBetMessage = "";
 
     private static final int BG = Color.rgb(8, 13, 25);
     private static final int PANEL = Color.rgb(18, 27, 45);
@@ -88,6 +99,7 @@ public final class MainActivity extends Activity {
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         loadHistoricalMatches();
+        virtualBalance = getSharedPreferences("deepscore_virtual_bets", MODE_PRIVATE).getInt("balance", 1000);
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
@@ -124,6 +136,7 @@ public final class MainActivity extends Activity {
         switch (activeTab) {
             case "Arşiv": renderMatches(true); break;
             case "Tahminler": renderPredictions(); break;
+            case "Sanal Kupon": renderVirtualBets(); break;
             case "Profil": renderProfile(); break;
             default: renderMatches(false); break;
         }
@@ -350,10 +363,10 @@ public final class MainActivity extends Activity {
         scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
         addHeader(content);
         addText(content, "Yapay Zekâ Tahmin Merkezi", 25, WHITE, true, 26);
-        addText(content, "Geçmiş Süper Lig sonuçlarından hesaplanan istatistiksel tahmin.", 14, MUTED, false, 5);
+        addText(content, "Geçmiş Süper Lig sonuçlarından hesaplanan ayrıntılı istatistiksel tahmin.", 14, MUTED, false, 5);
 
         LinearLayout notice = infoPanel("MODEL VE VERİ",
-                "Model; geçmiş maçları, ev/deplasman gol performansını ve sezon ağırlıklarını kullanır. Tahminler olasılıktır, kesin sonuç değildir.");
+                "Geçmiş tamamlanmış maçlar, ev/deplasman gol performansı ve sezon ağırlıkları kullanılır. Canlı oran veya canlı maç verisi değildir; tahminler garanti vermez.");
         LinearLayout.LayoutParams noticeLp = new LinearLayout.LayoutParams(-1, -2);
         noticeLp.topMargin = dp(18);
         content.addView(notice, noticeLp);
@@ -362,27 +375,33 @@ public final class MainActivity extends Activity {
         if (!teamsMessage.isEmpty()) addText(content, teamsMessage, 12, Color.rgb(255, 171, 105), false, 12);
 
         if (teamsLoaded && teamNames.size() >= 2) {
-            addText(content, "Ev sahibi takım", 13, WHITE, true, 20);
+            addText(content, "EV SAHİBİ TAKIM", 12, GREEN, true, 20);
             Spinner homeSpinner = teamSpinner();
-            content.addView(homeSpinner, new LinearLayout.LayoutParams(-1, dp(52)));
-            addText(content, "Deplasman takımı", 13, WHITE, true, 12);
+            homeSpinner.setBackground(round(PANEL_LIGHT, 14, GREEN));
+            content.addView(homeSpinner, new LinearLayout.LayoutParams(-1, dp(54)));
+            addText(content, "DEPLASMAN TAKIMI", 12, BLUE, true, 14);
             Spinner awaySpinner = teamSpinner();
-            content.addView(awaySpinner, new LinearLayout.LayoutParams(-1, dp(52)));
+            awaySpinner.setBackground(round(PANEL_LIGHT, 14, BLUE));
+            content.addView(awaySpinner, new LinearLayout.LayoutParams(-1, dp(54)));
             setSpinnerSelection(homeSpinner, selectedHomeTeam);
             setSpinnerSelection(awaySpinner, selectedAwayTeam);
             homeSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
                 @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
                     selectedHomeTeam = teamNames.get(position);
+                    pulseSelection(homeSpinner);
                 }
                 @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
             });
             awaySpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
                 @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
                     selectedAwayTeam = teamNames.get(position);
+                    pulseSelection(awaySpinner);
                 }
                 @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
             });
-            TextView predict = text(predictionLoading ? "TAHMİN HESAPLANIYOR…" : "YAPAY ZEKÂ İLE TAHMİN ET", 14, BG, true);
+            addText(content, "✓  Ev sahibi: " + (selectedHomeTeam.isEmpty() ? "Takım seçin" : selectedHomeTeam), 12, GREEN, true, 10);
+            addText(content, "✦  Deplasman: " + (selectedAwayTeam.isEmpty() ? "Takım seçin" : selectedAwayTeam), 12, BLUE, true, 4);
+            TextView predict = text(predictionLoading ? "TAHMİN HESAPLANIYOR…" : "✦  YAPAY ZEKÂ İLE TAHMİN ET", 14, BG, true);
             predict.setGravity(Gravity.CENTER);
             predict.setPadding(dp(16), dp(16), dp(16), dp(16));
             predict.setBackground(round(GREEN, 14, GREEN));
@@ -405,17 +424,50 @@ public final class MainActivity extends Activity {
             content.addView(error, errorLp);
         }
         if (predictionResult != null) renderPredictionResult(content, predictionResult);
-        TextView disclaimer = text("Kaynak: OpenFootball tarihsel Süper Lig arşivi. Canlı maç verisi kullanılmaz; tahminler garanti değildir.", 11, MUTED, false);
-        disclaimer.setPadding(dp(12), dp(14), dp(12), dp(10));
-        LinearLayout.LayoutParams disclaimerLp = new LinearLayout.LayoutParams(-1, -2);
-        disclaimerLp.topMargin = dp(18);
-        content.addView(disclaimer, disclaimerLp);
+        TextView virtualButton = text("🎟  SANAL KUPON OLUŞTUR  →", 13, GREEN, true);
+        virtualButton.setGravity(Gravity.CENTER);
+        virtualButton.setPadding(dp(12), dp(16), dp(12), dp(16));
+        virtualButton.setBackground(round(PANEL_LIGHT, 14, GREEN));
+        LinearLayout.LayoutParams virtualLp = new LinearLayout.LayoutParams(-1, -2);
+        virtualLp.topMargin = dp(16);
+        content.addView(virtualButton, virtualLp);
+        virtualButton.setOnClickListener(v -> {
+            activeTab = "Sanal Kupon";
+            renderPage();
+            updateNav();
+        });
+        addText(content, "Kaynak: OpenFootball tarihsel Süper Lig arşivi. Gerçek zamanlı maç veya bahis oranı kullanılmaz.", 11, MUTED, false, 18);
         pageContent.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+    }
+
+    private void pulseSelection(View view) {
+        AlphaAnimation pulse = new AlphaAnimation(0.55f, 1.0f);
+        pulse.setDuration(420);
+        pulse.setRepeatMode(Animation.REVERSE);
+        pulse.setRepeatCount(5);
+        view.startAnimation(pulse);
     }
 
     private Spinner teamSpinner() {
         Spinner spinner = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, teamNames);
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, teamNames) {
+            @Override public View getView(int position, View convertView, android.view.ViewGroup parent) {
+                TextView label = (TextView) super.getView(position, convertView, parent);
+                label.setTextColor(WHITE);
+                label.setTextSize(15);
+                label.setPadding(dp(12), dp(8), dp(8), dp(8));
+                label.setSingleLine(true);
+                return label;
+            }
+            @Override public View getDropDownView(int position, View convertView, android.view.ViewGroup parent) {
+                TextView label = (TextView) super.getDropDownView(position, convertView, parent);
+                label.setTextColor(WHITE);
+                label.setTextSize(14);
+                label.setPadding(dp(14), dp(12), dp(14), dp(12));
+                label.setBackgroundColor(PANEL);
+                return label;
+            }
+        };
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(adapter);
         return spinner;
@@ -434,31 +486,55 @@ public final class MainActivity extends Activity {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(16), dp(16), dp(16), dp(16));
-        panel.setBackground(round(PANEL, 18, LINE));
+        panel.setBackground(round(PANEL, 18, GREEN));
         LinearLayout.LayoutParams panelLp = new LinearLayout.LayoutParams(-1, -2);
         panelLp.topMargin = dp(20);
         content.addView(panel, panelLp);
-        panel.addView(text("TAHMİN SONUCU", 11, GREEN, true));
-        addText(panel, match.optString("home") + "  -  " + match.optString("away"), 17, WHITE, true, 10);
-        addText(panel, "Beklenen gol: " + goals.optString("home") + " - " + goals.optString("away"), 13, MUTED, true, 8);
+        panel.addView(text("TAHMİN RAPORU", 11, GREEN, true));
+        addText(panel, match.optString("home") + "  -  " + match.optString("away"), 18, WHITE, true, 10);
+        addText(panel, "Beklenen gol: " + goals.optString("home") + " - " + goals.optString("away"), 14, WHITE, true, 8);
+        addText(panel, "Toplam beklenen gol: " + String.format(java.util.Locale.US, "%.2f", goals.optDouble("home") + goals.optDouble("away")), 12, MUTED, false, 4);
         addDivider(panel, 14, 10);
-        addProbabilityRow(panel, "Ev sahibi kazanır", probabilities.optDouble("home_win") * 100);
-        addProbabilityRow(panel, "Beraberlik", probabilities.optDouble("draw") * 100);
-        addProbabilityRow(panel, "Deplasman kazanır", probabilities.optDouble("away_win") * 100);
-        addProbabilityRow(panel, "2,5 üst", probabilities.optDouble("over_2_5") * 100);
-        addProbabilityRow(panel, "Karşılıklı gol", probabilities.optDouble("both_teams_to_score") * 100);
+        addText(panel, "MAÇ SONUCU OLASILIKLARI", 11, BLUE, true, 2);
+        addProbabilityRow(panel, "Ev sahibi kazanır (1)", probabilities.optDouble("home_win") * 100);
+        addProbabilityRow(panel, "Beraberlik (X)", probabilities.optDouble("draw") * 100);
+        addProbabilityRow(panel, "Deplasman kazanır (2)", probabilities.optDouble("away_win") * 100);
+        addDivider(panel, 10, 8);
+        double homeWin = probabilities.optDouble("home_win") * 100;
+        double draw = probabilities.optDouble("draw") * 100;
+        double awayWin = probabilities.optDouble("away_win") * 100;
+        addText(panel, "ÇİFTE ŞANS", 11, BLUE, true, 2);
+        addProbabilityRow(panel, "1X · Ev sahibi veya beraberlik", homeWin + draw);
+        addProbabilityRow(panel, "X2 · Beraberlik veya deplasman", draw + awayWin);
+        addProbabilityRow(panel, "12 · Beraberlik hariç", homeWin + awayWin);
+        addDivider(panel, 10, 8);
+        addText(panel, "GOL PAZARLARI", 11, BLUE, true, 2);
+        addProbabilityRow(panel, "2,5 gol üst", probabilities.optDouble("over_2_5") * 100);
+        addProbabilityRow(panel, "2,5 gol alt", probabilities.optDouble("under_2_5") * 100);
+        addProbabilityRow(panel, "Karşılıklı gol var", probabilities.optDouble("both_teams_to_score") * 100);
+        addProbabilityRow(panel, "Karşılıklı gol yok", (1 - probabilities.optDouble("both_teams_to_score")) * 100);
         JSONArray scores = probabilities.optJSONArray("top_scores");
         if (scores != null && scores.length() > 0) {
-            addText(panel, "En olası skorlar", 14, WHITE, true, 14);
-            for (int i = 0; i < Math.min(3, scores.length()); i++) {
+            addDivider(panel, 12, 8);
+            addText(panel, "EN OLASI SKORLAR", 11, BLUE, true, 2);
+            for (int i = 0; i < Math.min(5, scores.length()); i++) {
                 JSONObject item = scores.optJSONObject(i);
-                if (item != null) {
-                    addText(panel, item.optString("score") + "  ·  " + Math.round(item.optDouble("probability") * 100) + "%", 12, MUTED, false, 6);
-                }
+                if (item != null) addProbabilityRow(panel, item.optString("score"), item.optDouble("probability") * 100);
             }
         }
-        addText(panel, "Modelin kullandığı tamamlanmış maç: " + result.optInt("training_matches"), 11, MUTED, false, 14);
-        addText(panel, "Olasılıklar geçmiş verilere dayalı tahmindir; kesin skor vaadi değildir.", 11, MUTED, false, 10);
+        addDivider(panel, 12, 8);
+        addText(panel, "Model bilgisi", 12, WHITE, true, 2);
+        addText(panel, "Kullanılan tamamlanmış maç: " + result.optInt("training_matches"), 11, MUTED, false, 5);
+        JSONArray seasons = result.optJSONArray("training_seasons");
+        if (seasons != null) {
+            StringBuilder seasonText = new StringBuilder();
+            for (int i = 0; i < seasons.length(); i++) {
+                if (i > 0) seasonText.append(" · ");
+                seasonText.append(seasons.optString(i));
+            }
+            addText(panel, "Sezonlar: " + seasonText, 11, MUTED, false, 5);
+        }
+        addText(panel, "Bu yüzdeler tarihsel veriden hesaplanan model olasılıklarıdır. Kesin sonuç veya kazanç garantisi yoktur.", 11, MUTED, false, 12);
     }
 
     private void addProbabilityRow(LinearLayout parent, String label, double percent) {
@@ -470,6 +546,187 @@ public final class MainActivity extends Activity {
         value.setGravity(Gravity.RIGHT);
         row.addView(value);
         parent.addView(row);
+        View track = new View(this);
+        track.setBackground(round(PANEL_LIGHT, 6, LINE));
+        LinearLayout.LayoutParams trackLp = new LinearLayout.LayoutParams(-1, dp(5));
+        trackLp.bottomMargin = dp(3);
+        parent.addView(track, trackLp);
+        track.post(() -> {
+            int width = track.getWidth();
+            if (width <= 0) return;
+            View fill = new View(this);
+            fill.setBackground(round(GREEN, 6, GREEN));
+            LinearLayout.LayoutParams fillLp = new LinearLayout.LayoutParams((int) (width * Math.max(0, Math.min(100, percent)) / 100.0), dp(5));
+            fillLp.topMargin = -dp(5);
+            ((LinearLayout) track.getParent()).addView(fill, ((LinearLayout) track.getParent()).indexOfChild(track) + 1, fillLp);
+        });
+    }
+
+    private void renderVirtualBets() {
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(20), dp(16), dp(20), dp(28));
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        addHeader(content);
+        addText(content, "Sanal Bahis Laboratuvarı", 25, WHITE, true, 24);
+        addText(content, "Gerçek para kullanmadan tahminlerini test et.", 14, MUTED, false, 5);
+
+        LinearLayout wallet = infoPanel("SANAL BAKİYE", String.format(java.util.Locale.forLanguageTag("tr-TR"), "%,d puan", virtualBalance));
+        wallet.setBackground(round(PANEL, 16, GREEN));
+        LinearLayout.LayoutParams walletLp = new LinearLayout.LayoutParams(-1, -2);
+        walletLp.topMargin = dp(18);
+        content.addView(wallet, walletLp);
+        LinearLayout notice = infoPanel("ÖNEMLİ",
+                "Bu bölüm yalnızca sanal puanlarla çalışan bir simülasyondur. Gerçek para, ödeme, para yatırma veya çekme yoktur. Simüle edilen sonuç gerçek maç sonucu değildir.");
+        LinearLayout.LayoutParams noticeLp = new LinearLayout.LayoutParams(-1, -2);
+        noticeLp.topMargin = dp(10);
+        content.addView(notice, noticeLp);
+
+        if (predictionResult == null) {
+            addText(content, "Önce Tahminler sekmesinden iki takım seçip tahmin oluştur. Sonra burada sanal kupon hazırlayabilirsin.", 13, WHITE, false, 18);
+            TextView go = text("TAHMİNLERE GİT  →", 13, GREEN, true);
+            go.setGravity(Gravity.CENTER);
+            go.setPadding(dp(14), dp(15), dp(14), dp(15));
+            go.setBackground(round(PANEL_LIGHT, 12, GREEN));
+            LinearLayout.LayoutParams goLp = new LinearLayout.LayoutParams(-1, -2);
+            goLp.topMargin = dp(12);
+            content.addView(go, goLp);
+            go.setOnClickListener(v -> { activeTab = "Tahminler"; renderPage(); updateNav(); });
+        } else {
+            JSONObject match = predictionResult.optJSONObject("match");
+            JSONObject probabilities = predictionResult.optJSONObject("probabilities");
+            if (match != null && probabilities != null) {
+                addText(content, "Maç: " + match.optString("home") + " – " + match.optString("away"), 15, WHITE, true, 18);
+                addText(content, "Tahmin pazarı", 12, GREEN, true, 14);
+                String[] markets = {"Ev sahibi kazanır", "Beraberlik", "Deplasman kazanır", "2,5 gol üst", "2,5 gol alt", "Karşılıklı gol var", "Çifte şans 1X", "Çifte şans X2", "Çifte şans 12"};
+                Spinner marketSpinner = new Spinner(this);
+                ArrayAdapter<String> marketAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, markets) {
+                    @Override public View getView(int position, View convertView, android.view.ViewGroup parent) {
+                        TextView label = (TextView) super.getView(position, convertView, parent);
+                        label.setTextColor(WHITE); label.setTextSize(14); label.setPadding(dp(12), dp(8), dp(8), dp(8));
+                        return label;
+                    }
+                    @Override public View getDropDownView(int position, View convertView, android.view.ViewGroup parent) {
+                        TextView label = (TextView) super.getDropDownView(position, convertView, parent);
+                        label.setTextColor(WHITE); label.setPadding(dp(14), dp(12), dp(14), dp(12)); label.setBackgroundColor(PANEL);
+                        return label;
+                    }
+                };
+                marketAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                marketSpinner.setAdapter(marketAdapter);
+                marketSpinner.setBackground(round(PANEL_LIGHT, 12, LINE));
+                int marketIndex = java.util.Arrays.asList(markets).indexOf(selectedVirtualMarket);
+                if (marketIndex >= 0) marketSpinner.setSelection(marketIndex);
+                marketSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                    @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) { selectedVirtualMarket = markets[position]; }
+                    @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+                });
+                content.addView(marketSpinner, new LinearLayout.LayoutParams(-1, dp(52)));
+
+                addText(content, "Sanal puan miktarı", 12, GREEN, true, 14);
+                EditText stake = new EditText(this);
+                stake.setSingleLine(true);
+                stake.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+                stake.setTextColor(WHITE);
+                stake.setHintTextColor(MUTED);
+                stake.setHint("Örn. 50");
+                stake.setPadding(dp(14), dp(8), dp(14), dp(8));
+                stake.setBackground(round(PANEL_LIGHT, 12, LINE));
+                content.addView(stake, new LinearLayout.LayoutParams(-1, dp(52)));
+
+                TextView place = text("SANAL KUPONU OLUŞTUR", 14, BG, true);
+                place.setGravity(Gravity.CENTER);
+                place.setPadding(dp(14), dp(16), dp(14), dp(16));
+                place.setBackground(round(GREEN, 14, GREEN));
+                LinearLayout.LayoutParams placeLp = new LinearLayout.LayoutParams(-1, -2);
+                placeLp.topMargin = dp(14);
+                content.addView(place, placeLp);
+                place.setOnClickListener(v -> {
+                    if (pendingVirtualStake > 0) {
+                        virtualBetMessage = "Önce açık sanal kuponun simülasyonunu tamamla.";
+                        renderPage(); return;
+                    }
+                    int amount;
+                    try { amount = Integer.parseInt(stake.getText().toString().trim()); }
+                    catch (Exception ex) { amount = 0; }
+                    if (amount < 1 || amount > virtualBalance) {
+                        virtualBetMessage = "1 ile mevcut sanal bakiyen arasında bir puan miktarı gir.";
+                        renderPage(); return;
+                    }
+                    double p = virtualMarketProbability(selectedVirtualMarket, probabilities);
+                    if (p <= 0 || p > 1) {
+                        virtualBetMessage = "Bu pazar için olasılık hesaplanamadı.";
+                        renderPage(); return;
+                    }
+                    pendingVirtualStake = amount;
+                    pendingVirtualProbability = p;
+                    pendingVirtualOdds = 1.0 / p;
+                    pendingVirtualMarket = selectedVirtualMarket;
+                    pendingVirtualMatch = match.optString("home") + " – " + match.optString("away");
+                    virtualBalance -= amount;
+                    getSharedPreferences("deepscore_virtual_bets", MODE_PRIVATE).edit().putInt("balance", virtualBalance).apply();
+                    virtualBetMessage = "Kupon hazırlandı. Tahmini oran: " + String.format(java.util.Locale.US, "%.2f", pendingVirtualOdds) + " · Olası geri dönüş: " + Math.round(amount * pendingVirtualOdds) + " puan.";
+                    renderPage();
+                });
+
+                if (pendingVirtualStake > 0) {
+                    LinearLayout pending = infoPanel("AÇIK SANAL KUPON",
+                            pendingVirtualMatch + "\nPazar: " + pendingVirtualMarket + "\nMiktar: " + pendingVirtualStake + " puan\nModel olasılığı: " + Math.round(pendingVirtualProbability * 100) + "%\nSimüle oran: " + String.format(java.util.Locale.US, "%.2f", pendingVirtualOdds));
+                    LinearLayout.LayoutParams pendingLp = new LinearLayout.LayoutParams(-1, -2);
+                    pendingLp.topMargin = dp(16);
+                    content.addView(pending, pendingLp);
+                    TextView settle = text("SONUCU SİMÜLE ET", 14, BG, true);
+                    settle.setGravity(Gravity.CENTER);
+                    settle.setPadding(dp(14), dp(16), dp(14), dp(16));
+                    settle.setBackground(round(BLUE, 14, BLUE));
+                    LinearLayout.LayoutParams settleLp = new LinearLayout.LayoutParams(-1, -2);
+                    settleLp.topMargin = dp(12);
+                    content.addView(settle, settleLp);
+                    settle.setOnClickListener(v -> {
+                        boolean won = Math.random() < pendingVirtualProbability;
+                        int stakeAmount = pendingVirtualStake;
+                        int payout = won ? (int) Math.round(stakeAmount * pendingVirtualOdds) : 0;
+                        virtualBalance += payout;
+                        getSharedPreferences("deepscore_virtual_bets", MODE_PRIVATE).edit().putInt("balance", virtualBalance).apply();
+                        virtualBetMessage = won
+                                ? "🎉 Simülasyonda kazandın! " + payout + " sanal puan bakiyene eklendi."
+                                : "Bu simülasyonda kupon tutmadı. " + stakeAmount + " sanal puan kullanıldı.";
+                        pendingVirtualStake = 0;
+                        pendingVirtualProbability = 0;
+                        pendingVirtualOdds = 0;
+                        pendingVirtualMarket = "";
+                        pendingVirtualMatch = "";
+                        renderPage();
+                    });
+                }
+            }
+        }
+        if (!virtualBetMessage.isEmpty()) {
+            TextView message = text(virtualBetMessage, 12, GREEN, true);
+            message.setPadding(dp(12), dp(12), dp(12), dp(12));
+            message.setBackground(round(PANEL, 12, LINE));
+            LinearLayout.LayoutParams messageLp = new LinearLayout.LayoutParams(-1, -2);
+            messageLp.topMargin = dp(14);
+            content.addView(message, messageLp);
+        }
+        pageContent.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+    }
+
+    private double virtualMarketProbability(String market, JSONObject probabilities) {
+        double home = probabilities.optDouble("home_win");
+        double draw = probabilities.optDouble("draw");
+        double away = probabilities.optDouble("away_win");
+        if ("Ev sahibi kazanır".equals(market)) return home;
+        if ("Beraberlik".equals(market)) return draw;
+        if ("Deplasman kazanır".equals(market)) return away;
+        if ("2,5 gol üst".equals(market)) return probabilities.optDouble("over_2_5");
+        if ("2,5 gol alt".equals(market)) return probabilities.optDouble("under_2_5");
+        if ("Karşılıklı gol var".equals(market)) return probabilities.optDouble("both_teams_to_score");
+        if ("Çifte şans 1X".equals(market)) return home + draw;
+        if ("Çifte şans X2".equals(market)) return draw + away;
+        if ("Çifte şans 12".equals(market)) return home + away;
+        return 0;
     }
 
     private void loadTeamsFromApi() {
@@ -757,8 +1014,8 @@ public final class MainActivity extends Activity {
         nav.setGravity(Gravity.CENTER_VERTICAL);
         nav.setPadding(dp(6), dp(7), dp(6), dp(7));
         nav.setBackground(round(PANEL, 0, LINE));
-        String[] labels = {"Maçlar", "Arşiv", "Tahminler", "Profil"};
-        String[] icons = {"⌂", "▤", "◇", "◉"};
+        String[] labels = {"Maçlar", "Arşiv", "Tahminler", "Sanal Kupon", "Profil"};
+        String[] icons = {"⌂", "▤", "◇", "🎟", "◉"};
         for (int i = 0; i < labels.length; i++) {
             final String tab = labels[i];
             boolean selected = tab.equals(activeTab) && selectedMatch == null;
