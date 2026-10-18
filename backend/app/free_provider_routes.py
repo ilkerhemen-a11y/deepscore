@@ -141,7 +141,19 @@ def _fetch_tff_round(round_number: int) -> list[dict[str, Any]]:
     )
     try:
         with urlopen(request, timeout=12) as response:
-            page = response.read().decode("utf-8", errors="replace")
+            raw_page = response.read()
+            # TFF pages may use a Turkish legacy encoding even when the
+            # response header is missing or incorrect. Prefer the declared
+            # charset, then fall back to Windows-1254 if UTF-8 decoding fails.
+            charset = response.headers.get_content_charset() or "utf-8"
+            try:
+                page = raw_page.decode(charset)
+            except (LookupError, UnicodeDecodeError):
+                page = raw_page.decode("cp1254", errors="replace")
+            if "\ufffd" in page:
+                legacy_page = raw_page.decode("cp1254", errors="replace")
+                if legacy_page.count("\ufffd") < page.count("\ufffd"):
+                    page = legacy_page
     except (HTTPError, URLError, TimeoutError):
         return []
 
