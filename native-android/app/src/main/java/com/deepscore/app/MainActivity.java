@@ -279,7 +279,10 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, -2);
         noteLp.topMargin = dp(16);
         content.addView(note, noteLp);
-        pageContent.addView(content, new LinearLayout.LayoutParams(-1, -1));
+        ScrollView detailScroll = new ScrollView(this);
+        detailScroll.setFillViewport(false);
+        detailScroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        pageContent.addView(detailScroll, new LinearLayout.LayoutParams(-1, -1));
     }
 
     private void addInfoRow(LinearLayout content, String label, String value) {
