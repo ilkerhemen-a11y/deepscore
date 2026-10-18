@@ -1,0 +1,38 @@
+name: DeepScore Native Android Baseline
+
+on:
+  push:
+    branches:
+      - restart/native-android-baseline
+    paths:
+      - "native-android/**"
+      - ".github/workflows/android-native-baseline.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build native diagnostic APK
+        working-directory: native-android
+        run: gradle --no-daemon assembleRelease
+      - name: Upload APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: deepscore-native-baseline-apk
+          path: native-android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
