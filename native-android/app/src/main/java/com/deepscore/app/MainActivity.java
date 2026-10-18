@@ -13,8 +13,8 @@ import android.widget.TextView;
 
 public final class MainActivity extends Activity {
     private LinearLayout matchesContainer;
-    private TextView liveEmpty;
-    private LinearLayout note;
+    private TextView emptyState;
+    private TextView sectionTitle;
     private static final int BG = Color.rgb(8, 13, 25);
     private static final int PANEL = Color.rgb(18, 27, 45);
     private static final int PANEL_LIGHT = Color.rgb(24, 36, 57);
@@ -48,7 +48,7 @@ public final class MainActivity extends Activity {
         LinearLayout brand = new LinearLayout(this);
         brand.setOrientation(LinearLayout.VERTICAL);
         TextView logo = text("DeepScore", 25, WHITE, true);
-        TextView subtitle = text("FUTBOLUN NABZI", 10, MUTED, true);
+        TextView subtitle = text("GEÇMİŞ MAÇLAR • KESİNLEŞMİŞ SKORLAR", 9, MUTED, true);
         subtitle.setLetterSpacing(0.13f);
         brand.addView(logo);
         brand.addView(subtitle);
@@ -65,7 +65,7 @@ public final class MainActivity extends Activity {
         welcomeLp.topMargin = dp(28);
         content.addView(welcome, welcomeLp);
 
-        TextView intro = text("Canlı skorlar, fikstür ve öne çıkan karşılaşmalar tek yerde.", 14, MUTED, false);
+        TextView intro = text("Daha önce oynanmış maçlar ve doğrulanmış sonuçlar.", 14, MUTED, false);
         LinearLayout.LayoutParams introLp = new LinearLayout.LayoutParams(-1, -2);
         introLp.topMargin = dp(5);
         content.addView(intro, introLp);
@@ -73,7 +73,7 @@ public final class MainActivity extends Activity {
         LinearLayout filters = new LinearLayout(this);
         filters.setOrientation(LinearLayout.HORIZONTAL);
         filters.setGravity(Gravity.CENTER_VERTICAL);
-        String[] filterLabels = {"Tümü", "Canlı", "Yaklaşan"};
+        String[] filterLabels = {"Tümü", "Süper Lig", "La Liga"};
         TextView[] filterChips = new TextView[filterLabels.length];
         for (int i = 0; i < filterLabels.length; i++) {
             final int selectedIndex = i;
@@ -87,9 +87,15 @@ public final class MainActivity extends Activity {
                     filterChips[j].setTextColor(selected ? BG : MUTED);
                     filterChips[j].setBackground(round(selected ? GREEN : PANEL_LIGHT, 24, selected ? GREEN : LINE));
                 }
-                matchesContainer.setVisibility(selectedIndex == 1 ? View.GONE : View.VISIBLE);
-                liveEmpty.setVisibility(selectedIndex == 1 ? View.VISIBLE : View.GONE);
-                note.setVisibility(selectedIndex == 1 ? View.GONE : View.VISIBLE);
+                String selectedLeague = selectedIndex == 1 ? "SÜPER LİG" : selectedIndex == 2 ? "LA LIGA" : "";
+                int shown = 0;
+                for (int k = 0; k < matchesContainer.getChildCount(); k++) {
+                    View card = matchesContainer.getChildAt(k);
+                    boolean visible = selectedLeague.isEmpty() || selectedLeague.equals((String) card.getTag());
+                    card.setVisibility(visible ? View.VISIBLE : View.GONE);
+                    if (visible) shown++;
+                }
+                emptyState.setVisibility(shown == 0 ? View.VISIBLE : View.GONE);
             });
             filterChips[i] = chip;
             LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(-2, -2);
@@ -102,9 +108,9 @@ public final class MainActivity extends Activity {
 
         LinearLayout section = new LinearLayout(this);
         section.setGravity(Gravity.CENTER_VERTICAL);
-        TextView sectionTitle = text("Öne Çıkan Maçlar", 18, WHITE, true);
+        sectionTitle = text("Sonuçlanmış Maçlar", 18, WHITE, true);
         section.addView(sectionTitle, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView sample = text("TASARIM ÖNİZLEMESİ", 9, GREEN, true);
+        TextView sample = text("TAMAMLANDI", 9, GREEN, true);
         sample.setPadding(dp(9), dp(6), dp(9), dp(6));
         sample.setBackground(round(Color.rgb(15, 57, 50), 30, Color.rgb(25, 99, 77)));
         section.addView(sample);
@@ -115,56 +121,39 @@ public final class MainActivity extends Activity {
 
         matchesContainer = new LinearLayout(this);
         matchesContainer.setOrientation(LinearLayout.VERTICAL);
-        matchesContainer.addView(matchCard("SÜPER LİG", "Galatasaray", "Fenerbahçe", "20:00", "Örnek"));
+        matchesContainer.addView(matchCard("SÜPER LİG", "Galatasaray", "Fenerbahçe", "0", "1", "19 Mayıs 2024"));
         LinearLayout.LayoutParams card2 = new LinearLayout.LayoutParams(-1, -2);
         card2.topMargin = dp(12);
-        matchesContainer.addView(matchCard("LA LIGA", "Real Madrid", "Barcelona", "22:00", "Örnek"), card2);
+        matchesContainer.addView(matchCard("LA LIGA", "Real Madrid", "Barcelona", "3", "2", "21 Nisan 2024"), card2);
         content.addView(matchesContainer);
 
-        liveEmpty = new TextView(this);
-        liveEmpty.setText("Şu anda canlı maç verisi bağlı değil. Gerçek skorları bir sonraki aşamada ekleyeceğiz.");
-        liveEmpty.setTextColor(MUTED);
-        liveEmpty.setTextSize(13);
-        liveEmpty.setGravity(Gravity.CENTER);
-        liveEmpty.setPadding(dp(18), dp(24), dp(18), dp(24));
-        liveEmpty.setBackground(round(PANEL, 16, LINE));
-        liveEmpty.setVisibility(View.GONE);
-        LinearLayout.LayoutParams liveEmptyLp = new LinearLayout.LayoutParams(-1, -2);
-        liveEmptyLp.topMargin = dp(12);
-        content.addView(liveEmpty, liveEmptyLp);
-
-        note = new LinearLayout(this);
-        note.setOrientation(LinearLayout.VERTICAL);
-        note.setPadding(dp(15), dp(14), dp(15), dp(14));
-        note.setBackground(round(PANEL, 16, LINE));
-        TextView noteTitle = text("Sıradaki adım", 15, WHITE, true);
-        TextView noteBody = text("Önce bu ekranın görünümünü tamamlıyoruz. Sonraki aşamada gerçek maç fikstürü ve skorları bağlanacak; örnek karşılaşmalar kaldırılacak.", 12, MUTED, false);
-        noteBody.setLineSpacing(dp(3), 1f);
-        LinearLayout.LayoutParams noteBodyLp = new LinearLayout.LayoutParams(-1, -2);
-        noteBodyLp.topMargin = dp(6);
-        note.addView(noteTitle);
-        note.addView(noteBody, noteBodyLp);
-        LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, -2);
-        noteLp.topMargin = dp(16);
-        content.addView(note, noteLp);
+        emptyState = text("Bu lig filtresinde gösterilecek geçmiş maç bulunamadı.", 13, MUTED, false);
+        emptyState.setGravity(Gravity.CENTER);
+        emptyState.setPadding(dp(18), dp(24), dp(18), dp(24));
+        emptyState.setBackground(round(PANEL, 16, LINE));
+        emptyState.setVisibility(View.GONE);
+        LinearLayout.LayoutParams emptyLp = new LinearLayout.LayoutParams(-1, -2);
+        emptyLp.topMargin = dp(12);
+        content.addView(emptyState, emptyLp);
 
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         root.addView(bottomNav());
         setContentView(root);
     }
 
-    private View matchCard(String league, String home, String away, String time, String day) {
+    private View matchCard(String league, String home, String away, String homeScore, String awayScore, String date) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(14), dp(16), dp(16));
         card.setBackground(round(PANEL, 18, LINE));
+        card.setTag(league);
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         TextView leagueLabel = text(league, 10, GREEN, true);
         leagueLabel.setLetterSpacing(0.08f);
         top.addView(leagueLabel, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView timeLabel = text(day + "  •  " + time, 11, MUTED, true);
+        TextView timeLabel = text(date, 11, MUTED, true);
         top.addView(timeLabel);
         card.addView(top);
 
@@ -182,14 +171,27 @@ public final class MainActivity extends Activity {
         LinearLayout homeColumn = teamColumn(home);
         LinearLayout awayColumn = teamColumn(away);
         teams.addView(homeColumn, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView vs = text("VS", 11, MUTED, true);
-        vs.setGravity(Gravity.CENTER);
-        vs.setBackground(round(PANEL_LIGHT, 30, LINE));
-        teams.addView(vs, new LinearLayout.LayoutParams(dp(42), dp(34)));
+        LinearLayout scoreBox = new LinearLayout(this);
+        scoreBox.setOrientation(LinearLayout.HORIZONTAL);
+        scoreBox.setGravity(Gravity.CENTER);
+        TextView homeGoals = text(homeScore, 21, WHITE, true);
+        TextView dash = text(" - ", 15, MUTED, true);
+        TextView awayGoals = text(awayScore, 21, WHITE, true);
+        scoreBox.addView(homeGoals);
+        scoreBox.addView(dash);
+        scoreBox.addView(awayGoals);
+        scoreBox.setPadding(dp(6), dp(5), dp(6), dp(5));
+        scoreBox.setBackground(round(PANEL_LIGHT, 12, LINE));
+        teams.addView(scoreBox, new LinearLayout.LayoutParams(-2, dp(42)));
         LinearLayout.LayoutParams awayLp = new LinearLayout.LayoutParams(0, -2, 1);
         awayLp.leftMargin = dp(8);
         teams.addView(awayColumn, awayLp);
         card.addView(teams);
+        TextView finished = text("✓  MAÇ TAMAMLANDI", 10, GREEN, true);
+        finished.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams finishedLp = new LinearLayout.LayoutParams(-1, -2);
+        finishedLp.topMargin = dp(12);
+        card.addView(finished, finishedLp);
         return card;
     }
 
