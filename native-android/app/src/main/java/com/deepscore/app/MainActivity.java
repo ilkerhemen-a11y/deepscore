@@ -62,16 +62,33 @@ public final class MainActivity extends Activity {
         welcomeLp.topMargin = dp(28);
         content.addView(welcome, welcomeLp);
 
-        TextView intro = text("Bugünün karşılaşmalarına göz at.", 14, MUTED, false);
+        TextView intro = text("Canlı skorlar, fikstür ve öne çıkan karşılaşmalar tek yerde.", 14, MUTED, false);
         LinearLayout.LayoutParams introLp = new LinearLayout.LayoutParams(-1, -2);
         introLp.topMargin = dp(5);
         content.addView(intro, introLp);
+
+        LinearLayout filters = new LinearLayout(this);
+        filters.setOrientation(LinearLayout.HORIZONTAL);
+        filters.setGravity(Gravity.CENTER_VERTICAL);
+        String[] filterLabels = {"Tümü", "Canlı", "Yaklaşan"};
+        for (int i = 0; i < filterLabels.length; i++) {
+            TextView chip = text(filterLabels[i], 12, i == 0 ? BG : MUTED, true);
+            chip.setGravity(Gravity.CENTER);
+            chip.setPadding(dp(15), dp(9), dp(15), dp(9));
+            chip.setBackground(round(i == 0 ? GREEN : PANEL_LIGHT, 24, i == 0 ? GREEN : LINE));
+            LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(-2, -2);
+            chipLp.rightMargin = dp(8);
+            filters.addView(chip, chipLp);
+        }
+        LinearLayout.LayoutParams filtersLp = new LinearLayout.LayoutParams(-1, -2);
+        filtersLp.topMargin = dp(18);
+        content.addView(filters, filtersLp);
 
         LinearLayout section = new LinearLayout(this);
         section.setGravity(Gravity.CENTER_VERTICAL);
         TextView sectionTitle = text("Öne Çıkan Maçlar", 18, WHITE, true);
         section.addView(sectionTitle, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView sample = text("ÖRNEK VERİ", 10, GREEN, true);
+        TextView sample = text("TASARIM ÖNİZLEMESİ", 9, GREEN, true);
         sample.setPadding(dp(9), dp(6), dp(9), dp(6));
         sample.setBackground(round(Color.rgb(15, 57, 50), 30, Color.rgb(25, 99, 77)));
         section.addView(sample);
@@ -89,8 +106,8 @@ public final class MainActivity extends Activity {
         note.setOrientation(LinearLayout.VERTICAL);
         note.setPadding(dp(15), dp(14), dp(15), dp(14));
         note.setBackground(round(PANEL, 16, LINE));
-        TextView noteTitle = text("Yeni başlangıç", 15, WHITE, true);
-        TextView noteBody = text("Bu ekran, uygulamanın sağlam Android temeli üzerinde hazırlanan ilk arayüz denemesidir. Maç bilgileri şu an örnektir.", 12, MUTED, false);
+        TextView noteTitle = text("Sıradaki adım", 15, WHITE, true);
+        TextView noteBody = text("Önce bu ekranın görünümünü tamamlıyoruz. Sonraki aşamada gerçek maç fikstürü ve skorları bağlanacak; örnek karşılaşmalar kaldırılacak.", 12, MUTED, false);
         noteBody.setLineSpacing(dp(3), 1f);
         LinearLayout.LayoutParams noteBodyLp = new LinearLayout.LayoutParams(-1, -2);
         noteBodyLp.topMargin = dp(6);
