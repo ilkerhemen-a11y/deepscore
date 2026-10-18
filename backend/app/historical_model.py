@@ -221,7 +221,7 @@ def historical_teams() -> dict[str, Any]:
 @router.get("/matches")
 def historical_matches(
     team: str | None = Query(default=None, min_length=1, max_length=100),
-    season: str | None = Query(default=None, pattern=r"^\\d{4}-\\d{2}$"),
+    season: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0, le=10000),
 ) -> dict[str, Any]:
