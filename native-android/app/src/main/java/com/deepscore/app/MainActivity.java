@@ -672,33 +672,33 @@ public final class MainActivity extends Activity {
 
                 if (pendingVirtualStake > 0) {
                     LinearLayout pending = infoPanel("AÇIK SANAL KUPON",
-                            pendingVirtualMatch + "\nPazar: " + pendingVirtualMarket + "\nMiktar: " + pendingVirtualStake + " puan\nModel olasılığı: " + Math.round(pendingVirtualProbability * 100) + "%\nSimüle oran: " + String.format(java.util.Locale.US, "%.2f", pendingVirtualOdds));
+                            pendingVirtualMatch + "\nPazar: " + pendingVirtualMarket + "\nMiktar: " + pendingVirtualStake + " puan\nModel olasılığı: " + Math.round(pendingVirtualProbability * 100) + "%\nSanal oran: " + String.format(java.util.Locale.US, "%.2f", pendingVirtualOdds));
                     LinearLayout.LayoutParams pendingLp = new LinearLayout.LayoutParams(-1, -2);
                     pendingLp.topMargin = dp(16);
                     content.addView(pending, pendingLp);
-                    TextView settle = text("SONUCU SİMÜLE ET", 14, BG, true);
-                    settle.setGravity(Gravity.CENTER);
-                    settle.setPadding(dp(14), dp(16), dp(14), dp(16));
-                    settle.setBackground(round(BLUE, 14, BLUE));
-                    LinearLayout.LayoutParams settleLp = new LinearLayout.LayoutParams(-1, -2);
-                    settleLp.topMargin = dp(12);
-                    content.addView(settle, settleLp);
-                    settle.setOnClickListener(v -> {
-                        boolean won = Math.random() < pendingVirtualProbability;
-                        int stakeAmount = pendingVirtualStake;
-                        int payout = won ? (int) Math.round(stakeAmount * pendingVirtualOdds) : 0;
-                        virtualBalance += payout;
-                        getSharedPreferences("deepscore_virtual_bets", MODE_PRIVATE).edit().putInt("balance", virtualBalance).apply();
-                        virtualBetMessage = won
-                                ? "🎉 Simülasyonda kazandın! " + payout + " sanal puan bakiyene eklendi."
-                                : "Bu simülasyonda kupon tutmadı. " + stakeAmount + " sanal puan kullanıldı.";
-                        pendingVirtualStake = 0;
-                        pendingVirtualProbability = 0;
-                        pendingVirtualOdds = 0;
-                        pendingVirtualMarket = "";
-                        pendingVirtualMatch = "";
-                        renderPage();
-                    });
+                    addText(content, "Maçın gerçek sonucunu kontrol et; kuponun doğruysa TUTTU, değilse BAŞARISIZ seç. Sonuç otomatik kontrol edilmez.", 12, MUTED, false, 10);
+                    LinearLayout resultButtons = new LinearLayout(this);
+                    resultButtons.setOrientation(LinearLayout.HORIZONTAL);
+                    resultButtons.setGravity(Gravity.CENTER);
+                    TextView wonButton = text("✓ TUTTU", 14, BG, true);
+                    wonButton.setGravity(Gravity.CENTER);
+                    wonButton.setPadding(dp(8), dp(16), dp(8), dp(16));
+                    wonButton.setBackground(round(GREEN, 12, GREEN));
+                    TextView lostButton = text("✕ BAŞARISIZ", 14, WHITE, true);
+                    lostButton.setGravity(Gravity.CENTER);
+                    lostButton.setPadding(dp(8), dp(16), dp(8), dp(16));
+                    lostButton.setBackground(round(Color.rgb(220, 75, 75), 12, Color.rgb(220, 75, 75)));
+                    LinearLayout.LayoutParams resultLp = new LinearLayout.LayoutParams(0, -2, 1);
+                    resultLp.topMargin = dp(12);
+                    resultLp.rightMargin = dp(6);
+                    resultButtons.addView(wonButton, resultLp);
+                    LinearLayout.LayoutParams lostLp = new LinearLayout.LayoutParams(0, -2, 1);
+                    lostLp.topMargin = dp(12);
+                    lostLp.leftMargin = dp(6);
+                    resultButtons.addView(lostButton, lostLp);
+                    content.addView(resultButtons, new LinearLayout.LayoutParams(-1, -2));
+                    wonButton.setOnClickListener(v -> settleVirtualBet(true));
+                    lostButton.setOnClickListener(v -> settleVirtualBet(false));
                 }
             }
         }
@@ -711,6 +711,24 @@ public final class MainActivity extends Activity {
             content.addView(message, messageLp);
         }
         pageContent.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+    }
+
+
+    private void settleVirtualBet(boolean won) {
+        if (pendingVirtualStake <= 0) return;
+        int stakeAmount = pendingVirtualStake;
+        int payout = won ? (int) Math.round(stakeAmount * pendingVirtualOdds) : 0;
+        virtualBalance += payout;
+        getSharedPreferences("deepscore_virtual_bets", MODE_PRIVATE).edit().putInt("balance", virtualBalance).apply();
+        virtualBetMessage = won
+                ? "✓ TUTTU! İşaretlediğin doğru sonuç için " + payout + " sanal puan bakiyene eklendi."
+                : "✕ BAŞARISIZ. " + stakeAmount + " sanal puanlık kupon kaybedildi.";
+        pendingVirtualStake = 0;
+        pendingVirtualProbability = 0;
+        pendingVirtualOdds = 0;
+        pendingVirtualMarket = "";
+        pendingVirtualMatch = "";
+        renderPage();
     }
 
     private double virtualMarketProbability(String market, JSONObject probabilities) {
